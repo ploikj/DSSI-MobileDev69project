@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 
 void main() {
   runApp(const MyApp());
@@ -44,12 +46,37 @@ class _MyHomePageState extends State<MyHomePage> {
     });
   }
 
-  void _apiToken() {
+  Future<void> _apiToken() async {
     final username = _usernameCtrl.text;
     final password = _passwordCtrl.text;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('ส่ง $username กับ $password ไป backend'))
-    );
+    
+    try {
+      final response = await http.post(
+        Uri.parse('http://127.0.0.1:8000/api/token/'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'username': username, 'password': password}),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        setState(() {
+          _accessCtrl.text = data['access'];
+          _refreshCtrl.text = data['refresh'];
+        });
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Login successful!')),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Login failed: ${response.statusCode}')),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error connecting to backend: $e')),
+      );
+    }
   }
 
   @override
