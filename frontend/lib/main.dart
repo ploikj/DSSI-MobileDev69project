@@ -1,108 +1,92 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
+import 'screens/equipment_catalog_screen.dart';
+import 'screens/my_bookings_screen.dart';
+import 'screens/settings_auth_screen.dart';
 
 void main() {
-  runApp(const MyApp());
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(const ITBookingApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class ITBookingApp extends StatelessWidget {
+  const ITBookingApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'UBU IT Equipment Booking',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF1E3A8A), // Indigo / Deep Blue
+          brightness: Brightness.light,
+        ),
+        appBarTheme: const AppBarTheme(
+          centerTitle: false,
+          elevation: 0,
+        ),
+        cardTheme: const CardThemeData(
+          elevation: 1.5,
+          margin: EdgeInsets.zero,
+        ),
       ),
-      home: const MyHomePage(title: 'Week14 Demo'),
+      home: const MainNavigationScreen(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-
-  final String title;
+class MainNavigationScreen extends StatefulWidget {
+  const MainNavigationScreen({super.key});
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<MainNavigationScreen> createState() => _MainNavigationScreenState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
-  final TextEditingController _usernameCtrl = TextEditingController();
-  final TextEditingController _passwordCtrl = TextEditingController();
+class _MainNavigationScreenState extends State<MainNavigationScreen> {
+  int _currentIndex = 0;
 
-  final TextEditingController _accessCtrl = TextEditingController();
-  final TextEditingController _refreshCtrl = TextEditingController();
-
-  void _incrementCounter() {
+  void _navigateToTab(int index) {
     setState(() {
-      _counter++;
+      _currentIndex = index;
     });
-  }
-
-  Future<void> _apiToken() async {
-    final username = _usernameCtrl.text;
-    final password = _passwordCtrl.text;
-    
-    try {
-      final response = await http.post(
-        Uri.parse('http://127.0.0.1:8000/api/token/'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'username': username, 'password': password}),
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        setState(() {
-          _accessCtrl.text = data['access'];
-          _refreshCtrl.text = data['refresh'];
-        });
-        
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Login successful!')),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Login failed: ${response.statusCode}')),
-        );
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error connecting to backend: $e')),
-      );
-    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final List<Widget> screens = [
+      EquipmentCatalogScreen(
+        onNavigateToBookings: () => _navigateToTab(1),
+      ),
+      const MyBookingsScreen(),
+      const SettingsAuthScreen(),
+    ];
+
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        title: Text(widget.title),
+      body: IndexedStack(
+        index: _currentIndex,
+        children: screens,
       ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: .center,
-          children: [
-            const Text('Enter username and password'),
-            TextField(controller: _usernameCtrl),
-            TextField(controller: _passwordCtrl, obscureText: true),
-            const Text('Access/Refresh Token'),
-            TextField(controller: _accessCtrl),
-            TextField(controller: _refreshCtrl),
-          ],
-        ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _apiToken,
-        tooltip: 'Access',
-        child: const Icon(Icons.favorite),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _currentIndex,
+        onDestinationSelected: _navigateToTab,
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.devices_outlined),
+            selectedIcon: Icon(Icons.devices),
+            label: 'อุปกรณ์ไอที',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.event_note_outlined),
+            selectedIcon: Icon(Icons.event_note),
+            label: 'กำหนดการรับ',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.account_circle_outlined),
+            selectedIcon: Icon(Icons.account_circle),
+            label: 'ผู้ใช้ & ตั้งค่า',
+          ),
+        ],
       ),
     );
   }
