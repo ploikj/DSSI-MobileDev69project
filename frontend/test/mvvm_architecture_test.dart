@@ -1,10 +1,13 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:frontend/models/booking.dart';
+import 'package:frontend/repositories/auth_repository.dart';
 import 'package:frontend/repositories/booking_repository.dart';
 import 'package:frontend/repositories/equipment_repository.dart';
 import 'package:frontend/repositories/result.dart';
 import 'package:frontend/services/api_service.dart';
 import 'package:frontend/services/localization_service.dart';
 import 'package:frontend/services/token_storage_service.dart';
+import 'package:frontend/viewmodels/auth_viewmodel.dart';
 import 'package:frontend/viewmodels/booking_viewmodel.dart';
 import 'package:frontend/viewmodels/equipment_viewmodel.dart';
 import 'package:frontend/viewmodels/locale_viewmodel.dart';
@@ -13,6 +16,7 @@ import 'package:http/testing.dart';
 
 class FakeTokenStorageService extends TokenStorageService {
   String? _savedLocale;
+  Map<String, dynamic>? _savedSession;
 
   @override
   Future<void> saveLocale(String langCode) async {
@@ -22,6 +26,16 @@ class FakeTokenStorageService extends TokenStorageService {
   @override
   Future<String?> loadLocale() async {
     return _savedLocale;
+  }
+
+  @override
+  Future<void> saveSession(Map<String, dynamic> session) async {
+    _savedSession = session;
+  }
+
+  @override
+  Future<Map<String, dynamic>?> loadSession() async {
+    return _savedSession;
   }
 }
 
@@ -336,6 +350,108 @@ void main() {
       expect(vm.currentLocale, 'th');
       expect(vm.isThai, isTrue);
       expect(await storage.loadLocale(), 'th');
+    });
+  });
+
+  group('Auth & Booking Permission Tests (Owner & Admin Restriction)', () {
+    final sampleBooking = Booking(
+      id: 101,
+      userId: 2,
+      username: 'narathip',
+      borrowerName: 'ณราธิป นันทสุรสีห์',
+      borrowerPhone: '081-234-5678',
+      borrowerStudentId: '65140001',
+      borrowerEmail: 'narathip@ubu.ac.th',
+      quantity: 1,
+      pickupDate: '2026-10-05',
+      pickupTime: '10:00:00',
+      returnDate: '2026-10-07',
+      purpose: 'Final Project Testing',
+      status: 'PENDING',
+      statusDisplay: 'รอนัดรับ',
+      note: '',
+    );
+
+    test('Unauthenticated user cannot manage booking', () {
+      final storage = FakeTokenStorageService();
+      final apiService = ApiService(client: MockClient((_) async => http.Response('{}', 200)));
+      final repo = AuthRepository(apiService: apiService, tokenStorage: storage);
+      final authVM = AuthViewModel(authRepository: repo);
+
+      expect(authVM.isAuthenticated, isFalse);
+      expect(authVM.canManageBooking(sampleBooking), isFalse);
+      expect(authVM.isBookingOwner(sampleBooking), isFalse);
+    });
+
+    test('Booking owner ("เจ้าตัว") can manage their own booking', () async {
+      final storage = FakeTokenStorageService();
+      await storage.saveSession({
+        'accessToken': 'dummy-token',
+        'username': 'narathip',
+        'claims': {
+          'sub': '2',
+          'preferred_username': 'narathip',
+          'student_id': '65140001',
+          'email': 'narathip@ubu.ac.th',
+          'is_staff': false,
+        }
+      });
+      final apiService = ApiService(client: MockClient((_) async => http.Response('{}', 200)));
+      final repo = AuthRepository(apiService: apiService, tokenStorage: storage);
+      final authVM = AuthViewModel(authRepository: repo);
+      await authVM.initSession();
+
+      expect(authVM.isAuthenticated, isTrue);
+      expect(authVM.isAdmin, isFalse);
+      expect(authVM.isBookingOwner(sampleBooking), isTrue);
+      expect(authVM.canManageBooking(sampleBooking), isTrue);
+    });
+
+    test('Non-owner user cannot manage other user booking', () async {
+      final storage = FakeTokenStorageService();
+      await storage.saveSession({
+        'accessToken': 'dummy-token',
+        'username': 'sompong',
+        'claims': {
+          'sub': '99',
+          'preferred_username': 'sompong',
+          'student_id': '65999999',
+          'email': 'sompong@ubu.ac.th',
+          'is_staff': false,
+        }
+      });
+      final apiService = ApiService(client: MockClient((_) async => http.Response('{}', 200)));
+      final repo = AuthRepository(apiService: apiService, tokenStorage: storage);
+      final authVM = AuthViewModel(authRepository: repo);
+      await authVM.initSession();
+
+      expect(authVM.isAuthenticated, isTrue);
+      expect(authVM.isAdmin, isFalse);
+      expect(authVM.isBookingOwner(sampleBooking), isFalse);
+      expect(authVM.canManageBooking(sampleBooking), isFalse);
+    });
+
+    test('Admin user can manage any booking', () async {
+      final storage = FakeTokenStorageService();
+      await storage.saveSession({
+        'accessToken': 'admin-token',
+        'username': 'admin',
+        'claims': {
+          'sub': '1',
+          'preferred_username': 'admin',
+          'roles': ['staff'],
+          'is_staff': true,
+          'is_superuser': true,
+        }
+      });
+      final apiService = ApiService(client: MockClient((_) async => http.Response('{}', 200)));
+      final repo = AuthRepository(apiService: apiService, tokenStorage: storage);
+      final authVM = AuthViewModel(authRepository: repo);
+      await authVM.initSession();
+
+      expect(authVM.isAuthenticated, isTrue);
+      expect(authVM.isAdmin, isTrue);
+      expect(authVM.canManageBooking(sampleBooking), isTrue);
     });
   });
 }

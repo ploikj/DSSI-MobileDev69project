@@ -131,7 +131,9 @@ class _BookingFormDialogViewState extends State<BookingFormDialogView> {
     final localeVM = context.read<LocaleViewModel>();
     setState(() => _isLoading = true);
 
-    final payload = {
+    final authVM = context.read<AuthViewModel>();
+    final curUserId = authVM.currentUserId;
+    final Map<String, dynamic> payload = {
       'equipment_id': widget.equipment.id,
       'borrower_name': _nameCtrl.text.trim(),
       'borrower_phone': _phoneCtrl.text.trim(),
@@ -145,6 +147,9 @@ class _BookingFormDialogViewState extends State<BookingFormDialogView> {
       'note': _noteCtrl.text.trim(),
       'status': 'PENDING',
     };
+    if (curUserId != null) {
+      payload['user'] = curUserId;
+    }
 
     // ส่งผ่าน BookingViewModel ตามหลัก MVVM
     final bookingVM = context.read<BookingViewModel>();

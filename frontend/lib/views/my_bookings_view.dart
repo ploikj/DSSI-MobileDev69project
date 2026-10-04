@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/booking.dart';
+import '../viewmodels/auth_viewmodel.dart';
 import '../viewmodels/booking_viewmodel.dart';
 import '../viewmodels/locale_viewmodel.dart';
 
@@ -442,10 +443,16 @@ class _MyBookingsViewState extends State<MyBookingsView> {
   }
 
   Widget _buildBookingCard(Booking item, ThemeData theme, LocaleViewModel localeVM) {
+    final authVM = context.watch<AuthViewModel>();
+    final isOwner = authVM.isBookingOwner(item);
+    final isAdmin = authVM.isAdmin;
+    final canManage = authVM.canManageBooking(item);
+
     final eq = item.equipmentDetail;
     final isPending = item.status == 'PENDING';
     final isPickedUp = item.status == 'PICKED_UP';
     final isReturned = item.status == 'RETURNED';
+    final isCancelled = item.status == 'CANCELLED';
 
     Color statusColor;
     Color statusBgColor;
@@ -472,6 +479,12 @@ class _MyBookingsViewState extends State<MyBookingsView> {
         statusIcon = Icons.task_alt;
         statusDisplay = localeVM.t('stat_returned');
         break;
+      case 'CANCELLED':
+        statusColor = Colors.red.shade800;
+        statusBgColor = Colors.red.shade50;
+        statusIcon = Icons.cancel_outlined;
+        statusDisplay = localeVM.t('status_cancelled');
+        break;
       default:
         statusColor = Colors.grey.shade700;
         statusBgColor = Colors.grey.shade100;
@@ -488,7 +501,7 @@ class _MyBookingsViewState extends State<MyBookingsView> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header Row: Booking ID and Status
+            // Header Row: Booking ID, Owner/Admin Badge and Status
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -507,6 +520,57 @@ class _MyBookingsViewState extends State<MyBookingsView> {
                       '${localeVM.t('booking_id')} #${item.id}',
                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                     ),
+                    if (isOwner) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.blue.shade300),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.person_pin, size: 13, color: Colors.blue.shade800),
+                            const SizedBox(width: 4),
+                            Text(
+                              localeVM.t('owner_badge'),
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.blue.shade900,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ] else if (isAdmin) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.purple.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.purple.shade300),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.admin_panel_settings, size: 13, color: Colors.purple.shade800),
+                            const SizedBox(width: 4),
+                            Text(
+                              localeVM.t('admin_badge'),
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.purple.shade900,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ],
                 ),
                 Container(
@@ -673,52 +737,108 @@ class _MyBookingsViewState extends State<MyBookingsView> {
 
             const SizedBox(height: 12),
 
-            // Action Buttons
+            // Action Buttons: Only Owner or Admin can Cancel or Return
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 if (isPending) ...[
-                  OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.red.shade700,
-                      side: BorderSide(color: Colors.red.shade300),
+                  if (canManage) ...[
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.red.shade700,
+                        side: BorderSide(color: Colors.red.shade300),
+                      ),
+                      onPressed: () => _updateStatus(
+                        item.id,
+                        'CANCELLED',
+                        localeVM.isThai ? 'ยกเลิกการจอง' : 'Cancel Booking',
+                      ),
+                      icon: const Icon(Icons.cancel_outlined, size: 16),
+                      label: Text(localeVM.t('btn_cancel_booking')),
                     ),
-                    onPressed: () => _updateStatus(
-                      item.id,
-                      'CANCELLED',
-                      localeVM.isThai ? 'ยกเลิกการจอง' : 'Cancel Booking',
+                    const SizedBox(width: 8),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green.shade700,
+                        foregroundColor: Colors.white,
+                      ),
+                      onPressed: () => _updateStatus(
+                        item.id,
+                        'PICKED_UP',
+                        localeVM.isThai ? 'รับอุปกรณ์แล้ว' : 'Mark Picked Up',
+                      ),
+                      icon: const Icon(Icons.check, size: 16),
+                      label: Text(localeVM.t('btn_confirm_pickup')),
                     ),
-                    icon: const Icon(Icons.cancel_outlined, size: 16),
-                    label: Text(localeVM.t('btn_cancel_booking')),
-                  ),
-                  const SizedBox(width: 8),
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green.shade700,
-                      foregroundColor: Colors.white,
+                  ] else ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.amber.shade300),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.lock_outline, size: 14, color: Colors.amber.shade900),
+                          const SizedBox(width: 6),
+                          Text(
+                            authVM.isAuthenticated
+                                ? localeVM.t('permission_denied_cancel')
+                                : localeVM.t('permission_login_required'),
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              color: Colors.amber.shade900,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                    onPressed: () => _updateStatus(
-                      item.id,
-                      'PICKED_UP',
-                      localeVM.isThai ? 'รับอุปกรณ์แล้ว' : 'Mark Picked Up',
-                    ),
-                    icon: const Icon(Icons.check, size: 16),
-                    label: Text(localeVM.t('btn_confirm_pickup')),
-                  ),
+                  ],
                 ] else if (isPickedUp) ...[
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.teal.shade700,
-                      foregroundColor: Colors.white,
+                  if (canManage) ...[
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.teal.shade700,
+                        foregroundColor: Colors.white,
+                      ),
+                      onPressed: () => _updateStatus(
+                        item.id,
+                        'RETURNED',
+                        localeVM.isThai ? 'คืนอุปกรณ์เรียบร้อยแล้ว' : 'Mark Returned',
+                      ),
+                      icon: const Icon(Icons.assignment_return, size: 16),
+                      label: Text(localeVM.t('btn_confirm_return')),
                     ),
-                    onPressed: () => _updateStatus(
-                      item.id,
-                      'RETURNED',
-                      localeVM.isThai ? 'คืนอุปกรณ์เรียบร้อยแล้ว' : 'Mark Returned',
+                  ] else ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.amber.shade300),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.lock_outline, size: 14, color: Colors.amber.shade900),
+                          const SizedBox(width: 6),
+                          Text(
+                            authVM.isAuthenticated
+                                ? localeVM.t('permission_denied_return')
+                                : localeVM.t('permission_login_required'),
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              color: Colors.amber.shade900,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                    icon: const Icon(Icons.assignment_return, size: 16),
-                    label: Text(localeVM.t('btn_confirm_return')),
-                  ),
+                  ],
                 ] else if (isReturned) ...[
                   Chip(
                     avatar: const Icon(Icons.check_circle, color: Colors.teal, size: 16),
@@ -727,6 +847,15 @@ class _MyBookingsViewState extends State<MyBookingsView> {
                       style: const TextStyle(fontSize: 11, color: Colors.teal),
                     ),
                     backgroundColor: Colors.teal.shade50,
+                  ),
+                ] else if (isCancelled) ...[
+                  Chip(
+                    avatar: const Icon(Icons.cancel_outlined, color: Colors.red, size: 16),
+                    label: Text(
+                      localeVM.t('status_cancelled_full'),
+                      style: const TextStyle(fontSize: 11, color: Colors.red),
+                    ),
+                    backgroundColor: Colors.red.shade50,
                   ),
                 ],
               ],

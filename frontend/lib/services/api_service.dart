@@ -66,6 +66,9 @@ class ApiService {
     if (_accessToken != null && _accessToken!.isNotEmpty) {
       headers['Authorization'] = 'Bearer $_accessToken';
     }
+    if (_currentUsername != null && _currentUsername!.isNotEmpty) {
+      headers['X-Username'] = _currentUsername!;
+    }
     return headers;
   }
 
@@ -281,7 +284,16 @@ class ApiService {
       final data = jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
       return Booking.fromJson(data);
     } else {
-      throw Exception('อัปเดตสถานะไม่สำเร็จ (${res.statusCode})');
+      String errorMessage = 'อัปเดตสถานะไม่สำเร็จ (${res.statusCode})';
+      try {
+        final errData = jsonDecode(utf8.decode(res.bodyBytes));
+        if (errData is Map && errData['error'] != null) {
+          errorMessage = errData['error'].toString();
+        } else if (errData is Map && errData['detail'] != null) {
+          errorMessage = errData['detail'].toString();
+        }
+      } catch (_) {}
+      throw Exception(errorMessage);
     }
   }
 
@@ -289,7 +301,16 @@ class ApiService {
     final uri = Uri.parse('$_baseUrl/api/bookings/$id/');
     final res = await _client.delete(uri, headers: _headers());
     if (res.statusCode != 204 && res.statusCode != 200) {
-      throw Exception('ลบรายการไม่สำเร็จ (${res.statusCode})');
+      String errorMessage = 'ลบรายการไม่สำเร็จ (${res.statusCode})';
+      try {
+        final errData = jsonDecode(utf8.decode(res.bodyBytes));
+        if (errData is Map && errData['error'] != null) {
+          errorMessage = errData['error'].toString();
+        } else if (errData is Map && errData['detail'] != null) {
+          errorMessage = errData['detail'].toString();
+        }
+      } catch (_) {}
+      throw Exception(errorMessage);
     }
   }
 }

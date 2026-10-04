@@ -13,6 +13,8 @@ def userinfo(claims, user):
     claims['email'] = user.email or f"{user.username}@ubu.ac.th"
     claims['email_verified'] = True
     claims['roles'] = ['staff' if user.is_staff else 'student']
+    claims['is_staff'] = user.is_staff
+    claims['is_superuser'] = user.is_superuser
     claims['student_id'] = getattr(user, 'student_id', f"66{user.id:06d}")
     return claims
 

@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import '../models/booking.dart';
 import '../repositories/auth_repository.dart';
 import '../repositories/result.dart';
 
@@ -34,6 +35,87 @@ class AuthViewModel extends ChangeNotifier {
   String? get accessToken => authRepository.apiService.accessToken;
   String? get idToken => authRepository.apiService.idToken;
   String? get refreshToken => authRepository.apiService.refreshToken;
+
+  /// ตรวจสอบว่าผู้ใช้ที่ล็อกอินมีสิทธิ์แอดมินหรือเจ้าหน้าที่หรือไม่
+  bool get isAdmin {
+    if (!_isAuthenticated) return false;
+    if (_username?.toLowerCase() == 'admin') return true;
+    if (_claims != null) {
+      if (_claims!['is_staff'] == true || _claims!['is_superuser'] == true) return true;
+      final roles = _claims!['roles'];
+      if (roles is List && (roles.contains('staff') || roles.contains('admin'))) return true;
+    }
+    return false;
+  }
+
+  /// ดึง User ID ของผู้ใช้ปัจจุบัน
+  int? get currentUserId {
+    if (_claims?['sub'] != null) {
+      return int.tryParse(_claims!['sub'].toString());
+    }
+    return null;
+  }
+
+  /// ตรวจสอบว่าผู้ใช้ปัจจุบันเป็นเจ้าของรายการจอง ("เจ้าตัว") หรือไม่
+  bool isBookingOwner(Booking booking) {
+    if (!_isAuthenticated) return false;
+
+    // ตรวจสอบจาก User ID ตรงๆ
+    if (booking.userId != null && currentUserId != null && booking.userId == currentUserId) {
+      return true;
+    }
+
+    final curUser = _username?.trim().toLowerCase();
+
+    // ตรวจสอบจาก username ของผู้จอง
+    final bUsername = booking.username?.trim().toLowerCase();
+    if (curUser != null && curUser.isNotEmpty && bUsername != null && bUsername.isNotEmpty) {
+      if (bUsername == curUser) return true;
+    }
+
+    // ตรวจสอบจากรหัสนักศึกษา/username
+    final bStudentId = booking.borrowerStudentId.trim().toLowerCase();
+    if (curUser != null && curUser.isNotEmpty && bStudentId.isNotEmpty) {
+      if (bStudentId == curUser) return true;
+    }
+
+    // ตรวจสอบจากชื่อผู้ยืมกับ username
+    final bName = booking.borrowerName.trim().toLowerCase();
+    if (curUser != null && curUser.isNotEmpty && bName.isNotEmpty) {
+      if (bName == curUser) return true;
+    }
+
+    // ตรวจสอบเทียบกับ Claims (email, student_id, name)
+    if (_claims != null) {
+      final claimEmail = _claims!['email']?.toString().trim().toLowerCase();
+      final bEmail = booking.borrowerEmail.trim().toLowerCase();
+      if (claimEmail != null && claimEmail.isNotEmpty && bEmail.isNotEmpty) {
+        if (claimEmail == bEmail) return true;
+      }
+
+      final claimStd = _claims!['student_id']?.toString().trim().toLowerCase();
+      if (claimStd != null && claimStd.isNotEmpty && bStudentId.isNotEmpty) {
+        if (claimStd == bStudentId) return true;
+      }
+
+      final claimName = _claims!['name']?.toString().trim().toLowerCase();
+      if (claimName != null && claimName.isNotEmpty && bName.isNotEmpty) {
+        if (bName == claimName || bName.contains(claimName) || claimName.contains(bName)) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  /// ตรวจสอบว่ามีสิทธิ์ยกเลิกการจองหรือคืนอุปกรณ์หรือไม่
+  /// เงื่อนไข: ต้องเป็น แอดมิน หรือ เจ้าตัว เท่านั้น คนอื่นไม่มีสิทธิ์
+  bool canManageBooking(Booking booking) {
+    if (isAdmin) return true;
+    if (booking.canManage == true) return true;
+    return isBookingOwner(booking);
+  }
 
   /// ตรวจสอบและกู้คืน Session จาก Secure Storage อัตโนมัติ (Route Guard)
   Future<void> initSession() async {

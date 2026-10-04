@@ -83,11 +83,14 @@ class Command(BaseCommand):
 
         # Create a sample booking
         if created_equipments and not Booking.objects.exists():
+            from django.contrib.auth.models import User
+            demo_user = User.objects.filter(username='narathip').first()
             today = date.today()
             pickup = today + timedelta(days=1)
             ret = today + timedelta(days=3)
             
             b = Booking.objects.create(
+                user=demo_user,
                 borrower_name='ณราธิป รักเรียน',
                 borrower_phone='081-234-5678',
                 borrower_student_id='65140001',

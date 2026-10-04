@@ -26,37 +26,101 @@ class EquipmentDetailView(APIView):
         except Equipment.DoesNotExist:
             return Response({'error': 'Equipment not found'}, status=status.HTTP_404_NOT_FOUND)
 
+def is_booking_owner(user, booking):
+    """
+    ตรวจสอบว่า user ที่เรียกใช้งานเป็น "เจ้าตัว" ของรายการจองนี้หรือไม่
+    """
+    if not user or not user.is_authenticated:
+        return False
+    # ตรวจสอบจาก Foreign Key user ตรงๆ
+    if booking.user_id and booking.user_id == user.id:
+        return True
+    # ตรวจสอบจาก email ผู้ยืม
+    if booking.borrower_email and user.email and booking.borrower_email.strip().lower() == user.email.strip().lower():
+        return True
+    # ตรวจสอบจากรหัสนักศึกษา/username
+    if booking.borrower_student_id and booking.borrower_student_id.strip().lower() == user.username.strip().lower():
+        return True
+    # ตรวจสอบจากชื่อผู้ยืมกับ username หรือ ชื่อจริง
+    if booking.borrower_name:
+        b_name = booking.borrower_name.strip().lower()
+        if b_name == user.username.strip().lower():
+            return True
+        if user.first_name and user.first_name.strip().lower() in b_name:
+            return True
+        full_name = f"{user.first_name} {user.last_name}".strip().lower()
+        if full_name and b_name == full_name:
+            return True
+    return False
+
+
+def is_admin_user(user):
+    """
+    ตรวจสอบว่า user เป็นแอดมินหรือเจ้าหน้าที่หรือไม่
+    """
+    if not user or not user.is_authenticated:
+        return False
+    return bool(user.is_staff or user.is_superuser or user.username.lower() == 'admin')
+
+
 class BookingListView(APIView):
     def get(self, request):
         status_param = request.query_params.get('status')
         search = request.query_params.get('search')
-        queryset = Booking.objects.all().select_related('equipment')
+        queryset = Booking.objects.all().select_related('equipment', 'user')
         if status_param and status_param != 'ALL':
             queryset = queryset.filter(status=status_param)
         if search:
             queryset = queryset.filter(borrower_name__icontains=search)
-        serializer = BookingSerializer(queryset, many=True)
+        serializer = BookingSerializer(queryset, many=True, context={'request': request})
         return Response(serializer.data)
 
     def post(self, request):
-        serializer = BookingSerializer(data=request.data)
+        serializer = BookingSerializer(data=request.data, context={'request': request})
         if serializer.is_valid():
-            booking = serializer.save()
-            return Response(BookingSerializer(booking).data, status=status.HTTP_201_CREATED)
+            if request.user and request.user.is_authenticated:
+                booking = serializer.save(user=request.user)
+            else:
+                booking = serializer.save()
+            return Response(BookingSerializer(booking, context={'request': request}).data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class BookingDetailView(APIView):
     def get(self, request, pk):
         try:
-            booking = Booking.objects.select_related('equipment').get(pk=pk)
-            return Response(BookingSerializer(booking).data)
+            booking = Booking.objects.select_related('equipment', 'user').get(pk=pk)
+            return Response(BookingSerializer(booking, context={'request': request}).data)
         except Booking.DoesNotExist:
             return Response({'error': 'Booking not found'}, status=status.HTTP_404_NOT_FOUND)
 
     def patch(self, request, pk):
         try:
-            booking = Booking.objects.select_related('equipment').get(pk=pk)
+            booking = Booking.objects.select_related('equipment', 'user').get(pk=pk)
             new_status = request.data.get('status')
+
+            # ตรวจสอบสิทธิ์: ต้องเข้าสู่ระบบก่อน
+            if not request.user or not request.user.is_authenticated:
+                return Response(
+                    {'error': 'กรุณาเข้าสู่ระบบก่อนทำรายการ (ต้องเป็นเจ้าของรายการจองหรือแอดมิน)'},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+
+            is_admin = is_admin_user(request.user)
+            is_owner = is_booking_owner(request.user, booking)
+
+            # ตรวจสอบสิทธิ์: การยกเลิกการจอง และ การคืนอุปกรณ์ ต้องเป็น เจ้าตัวเท่านั้นคนอื่นยกเลิกไม่ได้ นอกจากแอดมินกับเจ้าตัว
+            if not is_admin and not is_owner:
+                if new_status == 'CANCELLED':
+                    action_msg = 'การยกเลิกการจอง'
+                elif new_status == 'RETURNED':
+                    action_msg = 'การคืนอุปกรณ์'
+                else:
+                    action_msg = 'การจัดการรายการจองนี้'
+                return Response(
+                    {'error': f'{action_msg} ต้องเป็นเจ้าตัวเท่านั้นคนอื่นทำไม่ได้ นอกจากแอดมินกับเจ้าตัว'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
             if new_status:
                 old_status = booking.status
                 booking.status = new_status
@@ -69,13 +133,29 @@ class BookingDetailView(APIView):
                         booking.equipment.available_quantity -= booking.quantity
                         booking.equipment.save()
                 booking.save()
-            return Response(BookingSerializer(booking).data)
+            return Response(BookingSerializer(booking, context={'request': request}).data)
         except Booking.DoesNotExist:
             return Response({'error': 'Booking not found'}, status=status.HTTP_404_NOT_FOUND)
 
     def delete(self, request, pk):
         try:
-            booking = Booking.objects.select_related('equipment').get(pk=pk)
+            booking = Booking.objects.select_related('equipment', 'user').get(pk=pk)
+
+            if not request.user or not request.user.is_authenticated:
+                return Response(
+                    {'error': 'กรุณาเข้าสู่ระบบก่อนทำรายการ'},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+
+            is_admin = is_admin_user(request.user)
+            is_owner = is_booking_owner(request.user, booking)
+
+            if not is_admin and not is_owner:
+                return Response(
+                    {'error': 'เฉพาะเจ้าของรายการจองหรือแอดมินเท่านั้นที่สามารถลบรายการได้'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
             if booking.status not in ['RETURNED', 'CANCELLED']:
                 booking.equipment.available_quantity += booking.quantity
                 booking.equipment.save()

@@ -218,6 +218,34 @@ class LocalizationService {
       'th': 'ดำเนินการเสร็จสิ้นเรียบร้อยแล้ว',
       'en': 'Completed Successfully',
     },
+    'status_cancelled': {
+      'th': 'ยกเลิกการจองแล้ว',
+      'en': 'Cancelled',
+    },
+    'status_cancelled_full': {
+      'th': 'ยกเลิกการจองเรียบร้อยแล้ว',
+      'en': 'Booking Cancelled',
+    },
+    'owner_badge': {
+      'th': 'รายการของคุณ',
+      'en': 'Your Booking',
+    },
+    'admin_badge': {
+      'th': 'สิทธิ์แอดมิน',
+      'en': 'Admin Access',
+    },
+    'permission_denied_cancel': {
+      'th': 'ยกเลิกได้เฉพาะเจ้าตัวหรือแอดมินเท่านั้น',
+      'en': 'Only owner or admin can cancel',
+    },
+    'permission_denied_return': {
+      'th': 'คืนอุปกรณ์ได้เฉพาะเจ้าตัวหรือแอดมินเท่านั้น',
+      'en': 'Only owner or admin can return',
+    },
+    'permission_login_required': {
+      'th': 'เข้าสู่ระบบเพื่อจัดการการจอง',
+      'en': 'Login to manage booking',
+    },
     'empty_bookings': {
       'th': 'ยังไม่มีรายการจองตามเงื่อนไขที่เลือก',
       'en': 'No bookings match selected filters',

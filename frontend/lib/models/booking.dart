@@ -2,6 +2,9 @@ import 'equipment.dart';
 
 class Booking {
   final int id;
+  final int? userId;
+  final String? username;
+  final bool? canManage;
   final String borrowerName;
   final String borrowerPhone;
   final String borrowerStudentId;
@@ -19,6 +22,9 @@ class Booking {
 
   Booking({
     required this.id,
+    this.userId,
+    this.username,
+    this.canManage,
     required this.borrowerName,
     required this.borrowerPhone,
     required this.borrowerStudentId,
@@ -38,6 +44,9 @@ class Booking {
   factory Booking.fromJson(Map<String, dynamic> json) {
     return Booking(
       id: json['id'] as int,
+      userId: json['user_id'] as int? ?? (json['user'] is int ? json['user'] as int : null),
+      username: json['username'] as String?,
+      canManage: json['can_manage'] as bool?,
       borrowerName: json['borrower_name'] as String? ?? '',
       borrowerPhone: json['borrower_phone'] as String? ?? '',
       borrowerStudentId: json['borrower_student_id'] as String? ?? '',
