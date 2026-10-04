@@ -34,3 +34,13 @@ class CustomScopeClaims(ScopeClaims):
             'email': self.user.email or f"{self.user.username}@ubu.ac.th",
             'email_verified': True,
         }
+
+    def scope_student_id(self):
+        return {
+            'student_id': getattr(self.user, 'student_id', f"66{self.user.id:06d}"),
+        }
+
+    def scope_phone(self):
+        return {
+            'phone_number': getattr(self.user, 'phone_number', '0812345678'),
+        }
