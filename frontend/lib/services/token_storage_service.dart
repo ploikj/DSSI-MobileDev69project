@@ -93,4 +93,16 @@ class TokenStorageService {
     await _storage.delete(key: _keyUsername);
     await _storage.delete(key: _keyUserClaims);
   }
+
+  static const String _keyLocale = 'app_locale';
+
+  /// บันทึกภาษาที่เลือก (th หรือ en)
+  Future<void> saveLocale(String langCode) async {
+    await _storage.write(key: _keyLocale, value: langCode);
+  }
+
+  /// อ่านภาษาที่บันทึกไว้ (ค่าเริ่มต้นคือ th)
+  Future<String?> loadLocale() async {
+    return await _storage.read(key: _keyLocale);
+  }
 }

@@ -3,10 +3,11 @@ import 'package:provider/provider.dart';
 import '../models/equipment.dart';
 import '../viewmodels/booking_viewmodel.dart';
 import '../viewmodels/equipment_viewmodel.dart';
+import '../viewmodels/locale_viewmodel.dart';
 import 'booking_form_dialog_view.dart';
 
 /// หน้าจอคลังอุปกรณ์ไอทีตามสถาปัตยกรรม MVVM
-/// แสดงผลข้อมูลจาก EquipmentViewModel และสถิตินัดรับจาก BookingViewModel ผ่าน Provider
+/// รองรับการค้นหา/กรองแบบเรียลไทม์, เรียงลำดับหลายรูปแบบ, และสลับภาษาไทย/อังกฤษ
 class EquipmentCatalogView extends StatefulWidget {
   final VoidCallback onNavigateToBookings;
   final VoidCallback? onLogout;
@@ -52,50 +53,84 @@ class _EquipmentCatalogViewState extends State<EquipmentCatalogView> {
     );
   }
 
+  String _getCategoryLabel(String key, LocaleViewModel localeVM) {
+    switch (key) {
+      case 'laptop':
+        return localeVM.t('cat_laptop');
+      case 'projector':
+        return localeVM.t('cat_projector');
+      case 'tablet':
+        return localeVM.t('cat_tablet');
+      case 'audio_video':
+        return localeVM.t('cat_audio_video');
+      case 'accessories':
+        return localeVM.t('cat_accessories');
+      default:
+        return localeVM.t('cat_all');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final eqVM = context.watch<EquipmentViewModel>();
     final bookingVM = context.watch<BookingViewModel>();
+    final localeVM = context.watch<LocaleViewModel>();
 
     return Scaffold(
       appBar: AppBar(
-        title: const Column(
+        title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'ระบบจองอุปกรณ์ไอที',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
+              localeVM.t('catalog_title'),
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 19),
             ),
             Text(
-              'เลือกอุปกรณ์และนัดหมายวัน-เวลารับ',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
+              localeVM.t('catalog_subtitle'),
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
             ),
           ],
         ),
         actions: [
+          // Language Switcher Action Button
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: ActionChip(
+              avatar: Text(localeVM.isThai ? '🇹🇭' : '🇬🇧', style: const TextStyle(fontSize: 14)),
+              label: Text(
+                localeVM.isThai ? 'TH' : 'EN',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+              ),
+              backgroundColor: theme.colorScheme.primaryContainer.withValues(alpha: 0.6),
+              side: BorderSide(color: theme.colorScheme.primary.withValues(alpha: 0.3)),
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              visualDensity: VisualDensity.compact,
+              onPressed: () => localeVM.toggleLocale(),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'รีเฟรชข้อมูล',
+            tooltip: localeVM.isThai ? 'รีเฟรชข้อมูล' : 'Refresh Data',
             onPressed: () => eqVM.loadEquipments(),
           ),
           if (widget.onLogout != null)
             IconButton(
               icon: const Icon(Icons.logout),
-              tooltip: 'ออกจากระบบ',
+              tooltip: localeVM.t('btn_logout'),
               onPressed: widget.onLogout,
             ),
         ],
       ),
       body: Column(
         children: [
-          // Search box
+          // 1. Real-time Search Box
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
             child: TextField(
               controller: _searchCtrl,
               decoration: InputDecoration(
-                hintText: 'ค้นหาอุปกรณ์ไอที...',
+                hintText: localeVM.t('search_hint'),
                 prefixIcon: const Icon(Icons.search),
                 suffixIcon: _searchCtrl.text.isNotEmpty
                     ? IconButton(
@@ -114,14 +149,17 @@ class _EquipmentCatalogViewState extends State<EquipmentCatalogView> {
                   borderSide: BorderSide.none,
                 ),
               ),
-              onSubmitted: (val) => eqVM.search(val),
+              onChanged: (val) {
+                setState(() {});
+                eqVM.search(val);
+              },
             ),
           ),
 
-          // Pending Pickup Reminder Banner (ดึงสถิติตรงจาก BookingViewModel)
+          // 2. Pending Pickup Reminder Banner
           if (bookingVM.pendingCount > 0)
             Container(
-              margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              margin: const EdgeInsets.fromLTRB(16, 4, 16, 6),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
                 color: Colors.amber.shade50,
@@ -134,7 +172,7 @@ class _EquipmentCatalogViewState extends State<EquipmentCatalogView> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'คุณมีรายการอุปกรณ์รอนัดรับ ${bookingVM.pendingCount} รายการ',
+                      localeVM.t('pending_pickup_banner', {'count': '${bookingVM.pendingCount}'}),
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         color: Colors.amber.shade900,
@@ -149,11 +187,11 @@ class _EquipmentCatalogViewState extends State<EquipmentCatalogView> {
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
                     onPressed: widget.onNavigateToBookings,
-                    child: const Row(
+                    child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text('ตรวจสอบวันนัดรับ', style: TextStyle(fontWeight: FontWeight.bold)),
-                        Icon(Icons.arrow_forward_ios, size: 12),
+                        Text(localeVM.t('check_pickup_btn'), style: const TextStyle(fontWeight: FontWeight.bold)),
+                        const Icon(Icons.arrow_forward_ios, size: 12),
                       ],
                     ),
                   ),
@@ -161,9 +199,9 @@ class _EquipmentCatalogViewState extends State<EquipmentCatalogView> {
               ),
             ),
 
-          // Categories Filter Horizontal List
+          // 3. Category Filter Chips (Horizontal)
           SizedBox(
-            height: 48,
+            height: 44,
             child: ListView.separated(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               scrollDirection: Axis.horizontal,
@@ -171,32 +209,144 @@ class _EquipmentCatalogViewState extends State<EquipmentCatalogView> {
               separatorBuilder: (_, _) => const SizedBox(width: 8),
               itemBuilder: (context, index) {
                 final cat = eqVM.categories[index];
-                final isSelected = eqVM.selectedCategory == cat['key'];
+                final catKey = cat['key']!;
+                final isSelected = eqVM.selectedCategory == catKey;
+                final label = _getCategoryLabel(catKey, localeVM);
+
                 return ChoiceChip(
-                  label: Text(cat['label']!),
+                  label: Text(label),
                   selected: isSelected,
                   selectedColor: theme.colorScheme.primaryContainer,
                   labelStyle: TextStyle(
                     color: isSelected ? theme.colorScheme.primary : Colors.black87,
                     fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                    fontSize: 13,
+                    fontSize: 12.5,
                   ),
                   onSelected: (selected) {
                     if (selected) {
-                      eqVM.setCategory(cat['key']!);
+                      eqVM.setCategory(catKey);
                     }
                   },
                 );
               },
             ),
           ),
-          const SizedBox(height: 8),
 
-          // Content List
+          // 4. Filter & Sorting Controls Row
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
+            child: Row(
+              children: [
+                // Available Only Filter Chip
+                FilterChip(
+                  avatar: Icon(
+                    eqVM.onlyAvailable ? Icons.check_circle : Icons.circle_outlined,
+                    size: 16,
+                    color: eqVM.onlyAvailable ? Colors.green.shade800 : Colors.grey,
+                  ),
+                  label: Text(
+                    localeVM.t('filter_available_only'),
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: eqVM.onlyAvailable ? FontWeight.bold : FontWeight.normal,
+                      color: eqVM.onlyAvailable ? Colors.green.shade900 : Colors.black87,
+                    ),
+                  ),
+                  selected: eqVM.onlyAvailable,
+                  selectedColor: Colors.green.shade100,
+                  checkmarkColor: Colors.green.shade900,
+                  onSelected: (_) => eqVM.toggleOnlyAvailable(),
+                ),
+                const Spacer(),
+                // Items Count Tag
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    localeVM.t('found_items', {'count': '${eqVM.equipments.length}'}),
+                    style: TextStyle(fontSize: 11.5, color: Colors.blueGrey.shade800, fontWeight: FontWeight.w600),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // Sorting Menu
+                PopupMenuButton<String>(
+                  tooltip: localeVM.t('sort_by'),
+                  initialValue: eqVM.sortBy,
+                  onSelected: (val) => eqVM.setSortBy(val),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey.shade300),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.sort, size: 16),
+                        const SizedBox(width: 4),
+                        Text(
+                          _getSortLabel(eqVM.sortBy, localeVM),
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                        ),
+                        const Icon(Icons.arrow_drop_down, size: 18),
+                      ],
+                    ),
+                  ),
+                  itemBuilder: (ctx) => [
+                    PopupMenuItem(
+                      value: 'name_asc',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.sort_by_alpha, size: 18),
+                          const SizedBox(width: 8),
+                          Text(localeVM.t('sort_name_asc'), style: const TextStyle(fontSize: 13)),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'name_desc',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.sort_by_alpha, size: 18),
+                          const SizedBox(width: 8),
+                          Text(localeVM.t('sort_name_desc'), style: const TextStyle(fontSize: 13)),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'available_desc',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.inventory_2_outlined, size: 18),
+                          const SizedBox(width: 8),
+                          Text(localeVM.t('sort_qty_desc'), style: const TextStyle(fontSize: 13)),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'newest',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.new_releases_outlined, size: 18),
+                          const SizedBox(width: 8),
+                          Text(localeVM.t('sort_newest'), style: const TextStyle(fontSize: 13)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          // 5. Equipment Content List
           Expanded(
             child: RefreshIndicator(
               onRefresh: () => eqVM.loadEquipments(),
-              child: _buildEquipmentContent(theme, eqVM),
+              child: _buildEquipmentContent(theme, eqVM, localeVM),
             ),
           ),
         ],
@@ -204,7 +354,20 @@ class _EquipmentCatalogViewState extends State<EquipmentCatalogView> {
     );
   }
 
-  Widget _buildEquipmentContent(ThemeData theme, EquipmentViewModel eqVM) {
+  String _getSortLabel(String sortBy, LocaleViewModel localeVM) {
+    switch (sortBy) {
+      case 'name_desc':
+        return localeVM.t('sort_name_desc');
+      case 'available_desc':
+        return localeVM.t('sort_qty_desc');
+      case 'newest':
+        return localeVM.t('sort_newest');
+      default:
+        return localeVM.t('sort_name_asc');
+    }
+  }
+
+  Widget _buildEquipmentContent(ThemeData theme, EquipmentViewModel eqVM, LocaleViewModel localeVM) {
     if (eqVM.isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -218,14 +381,21 @@ class _EquipmentCatalogViewState extends State<EquipmentCatalogView> {
             children: [
               const Icon(Icons.error_outline, size: 54, color: Colors.redAccent),
               const SizedBox(height: 12),
-              Text('โหลดข้อมูลอุปกรณ์ไม่สำเร็จ', style: theme.textTheme.titleMedium),
+              Text(
+                localeVM.isThai ? 'โหลดข้อมูลอุปกรณ์ไม่สำเร็จ' : 'Failed to load equipment catalog',
+                style: theme.textTheme.titleMedium,
+              ),
               const SizedBox(height: 6),
-              Text(eqVM.errorMessage!, textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+              Text(
+                eqVM.errorMessage!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 12, color: Colors.grey),
+              ),
               const SizedBox(height: 16),
               ElevatedButton.icon(
                 onPressed: () => eqVM.loadEquipments(),
                 icon: const Icon(Icons.refresh),
-                label: const Text('ลองใหม่'),
+                label: Text(localeVM.isThai ? 'ลองใหม่' : 'Retry'),
               ),
             ],
           ),
@@ -240,13 +410,13 @@ class _EquipmentCatalogViewState extends State<EquipmentCatalogView> {
           children: [
             Icon(Icons.devices_other, size: 64, color: Colors.grey.shade400),
             const SizedBox(height: 12),
-            const Text(
-              'ไม่พบอุปกรณ์ตามเงื่อนไขที่ค้นหา',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            Text(
+              localeVM.t('empty_equipments'),
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 6),
             Text(
-              'ลองเปลี่ยนหมวดหมู่หรือคำค้นหา',
+              localeVM.t('empty_equipments_sub'),
               style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
             ),
           ],
@@ -255,16 +425,16 @@ class _EquipmentCatalogViewState extends State<EquipmentCatalogView> {
     }
 
     return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       itemCount: eqVM.equipments.length,
       itemBuilder: (context, index) {
         final eq = eqVM.equipments[index];
-        return _buildEquipmentCard(eq, theme);
+        return _buildEquipmentCard(eq, theme, localeVM);
       },
     );
   }
 
-  Widget _buildEquipmentCard(Equipment item, ThemeData theme) {
+  Widget _buildEquipmentCard(Equipment item, ThemeData theme, LocaleViewModel localeVM) {
     final bool isAvailable = item.isAvailable;
 
     return Card(
@@ -306,12 +476,12 @@ class _EquipmentCatalogViewState extends State<EquipmentCatalogView> {
                       const SizedBox(height: 4),
                       if (item.modelNumber != null && item.modelNumber!.isNotEmpty)
                         Text(
-                          'รุ่น/รหัส: ${item.modelNumber}',
+                          '${localeVM.isThai ? 'รุ่น/รหัส:' : 'Model/SN:'} ${item.modelNumber}',
                           style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                         ),
                       const SizedBox(height: 4),
                       Text(
-                        item.categoryDisplay,
+                        _getCategoryLabel(item.category, localeVM),
                         style: TextStyle(
                           fontSize: 12,
                           color: theme.colorScheme.primary,
@@ -339,7 +509,7 @@ class _EquipmentCatalogViewState extends State<EquipmentCatalogView> {
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text(
-                    item.pickupLocation,
+                    '${localeVM.t('pickup_location_label')} ${item.pickupLocation}',
                     style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -363,7 +533,10 @@ class _EquipmentCatalogViewState extends State<EquipmentCatalogView> {
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      'พร้อมให้ยืม ${item.availableQuantity}/${item.totalQuantity} เครื่อง',
+                      localeVM.t('available_count', {
+                        'avail': '${item.availableQuantity}',
+                        'total': '${item.totalQuantity}',
+                      }),
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.bold,
@@ -381,7 +554,7 @@ class _EquipmentCatalogViewState extends State<EquipmentCatalogView> {
                   ),
                   onPressed: isAvailable ? () => _openBookingDialog(item) : null,
                   icon: const Icon(Icons.event_available, size: 18),
-                  label: Text(isAvailable ? 'จองอุปกรณ์' : 'ของหมด'),
+                  label: Text(isAvailable ? localeVM.t('btn_book') : localeVM.t('out_of_stock')),
                 ),
               ],
             ),

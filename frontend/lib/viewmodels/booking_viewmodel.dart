@@ -3,7 +3,8 @@ import '../models/booking.dart';
 import '../repositories/booking_repository.dart';
 import '../repositories/result.dart';
 
-/// ViewModel สำหรับจัดการการจองและกำหนดการรับอุปกรณ์ไอทีตามสถาปัตยกรรม MVVM
+/// ViewModel สำหรับจัดการการจองและกำหนดการรับอุปกรณ์ไอที
+/// รองรับการค้นหาแบบเรียลไทม์ (Real-time Search), การกรองตามสถานะ, และการเรียงลำดับวันนัดรับ
 class BookingViewModel extends ChangeNotifier {
   BookingRepository bookingRepository;
 
@@ -16,20 +17,60 @@ class BookingViewModel extends ChangeNotifier {
   List<Booking> _allBookings = [];
   bool _isLoading = false;
   String? _errorMessage;
+
+  // Real-time Search & Filter States
   String _selectedStatus = 'ALL';
+  String _searchQuery = '';
+  String _sortBy = 'pickup_asc'; // pickup_asc, pickup_desc, created_desc, id_desc
 
   List<Booking> get allBookings => _allBookings;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
   String get selectedStatus => _selectedStatus;
+  String get searchQuery => _searchQuery;
+  String get sortBy => _sortBy;
 
-  /// รายการที่กรองตามแท็บที่เลือกเพื่อนำไปแสดงผลบนหน้าจอ
+  /// รายการที่กรองตามสถานะ คำค้นหา และเรียงลำดับแบบเรียลไทม์เพื่อนำไปแสดงผลบนหน้าจอ
   List<Booking> get displayedBookings {
-    if (_selectedStatus == 'ALL') return _allBookings;
+    List<Booking> list = List.from(_allBookings);
+
+    // 1. กรองตามแท็บสถานะ (Status Tab Filter)
     if (_selectedStatus == 'PENDING') {
-      return _allBookings.where((b) => b.status == 'PENDING' || b.status == 'APPROVED').toList();
+      list = list.where((b) => b.status == 'PENDING' || b.status == 'APPROVED').toList();
+    } else if (_selectedStatus != 'ALL') {
+      list = list.where((b) => b.status == _selectedStatus).toList();
     }
-    return _allBookings.where((b) => b.status == _selectedStatus).toList();
+
+    // 2. ค้นหาแบบเรียลไทม์ (Real-time Search Query)
+    if (_searchQuery.trim().isNotEmpty) {
+      final q = _searchQuery.trim().toLowerCase();
+      list = list.where((b) {
+        final idMatch = b.id.toString().contains(q);
+        final eqMatch = b.equipmentDetail?.name.toLowerCase().contains(q) ?? false;
+        final borrowerMatch = b.borrowerName.toLowerCase().contains(q);
+        final phoneMatch = b.borrowerPhone.toLowerCase().contains(q);
+        final studentIdMatch = b.borrowerStudentId.toLowerCase().contains(q);
+        final purposeMatch = b.purpose.toLowerCase().contains(q);
+        return idMatch || eqMatch || borrowerMatch || phoneMatch || studentIdMatch || purposeMatch;
+      }).toList();
+    }
+
+    // 3. เรียงลำดับ (Sorting)
+    switch (_sortBy) {
+      case 'pickup_desc':
+        list.sort((a, b) => '${b.pickupDate} ${b.pickupTime}'.compareTo('${a.pickupDate} ${a.pickupTime}'));
+        break;
+      case 'created_desc':
+      case 'id_desc':
+        list.sort((a, b) => b.id.compareTo(a.id));
+        break;
+      case 'pickup_asc':
+      default:
+        list.sort((a, b) => '${a.pickupDate} ${a.pickupTime}'.compareTo('${b.pickupDate} ${b.pickupTime}'));
+        break;
+    }
+
+    return list;
   }
 
   /// สถิติที่คำนวณจากข้อมูลจริงทั้งหมด สม่ำเสมอและไม่ลดเป็น 0 เมื่อคลิกฟิลเตอร์
@@ -58,10 +99,24 @@ class BookingViewModel extends ChangeNotifier {
     }
   }
 
+  /// ค้นหาแบบเรียลไทม์ขณะพิมพ์
+  void search(String query) {
+    if (_searchQuery == query) return;
+    _searchQuery = query;
+    notifyListeners();
+  }
+
   /// สลับฟิลเตอร์แสดงผลในเครื่อง โดยไม่ทำลายข้อมูลสถิติรวม
   void setStatusFilter(String status) {
     if (_selectedStatus == status) return;
     _selectedStatus = status;
+    notifyListeners();
+  }
+
+  /// เปลี่ยนรูปแบบการเรียงลำดับ
+  void setSortBy(String sortOption) {
+    if (_sortBy == sortOption) return;
+    _sortBy = sortOption;
     notifyListeners();
   }
 

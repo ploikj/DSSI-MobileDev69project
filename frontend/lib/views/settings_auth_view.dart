@@ -4,9 +4,10 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../viewmodels/auth_viewmodel.dart';
 import '../viewmodels/booking_viewmodel.dart';
+import '../viewmodels/locale_viewmodel.dart';
 
 /// หน้าจอตรวจสอบระบบยืนยันตัวตน OIDC และ JWT ตามสถาปัตยกรรม MVVM
-/// ติดต่อกับ AuthViewModel และ BookingViewModel ผ่าน Provider เท่านั้น ไม่ติดต่อ Service โดยตรง
+/// รองรับการสลับภาษาไทย/อังกฤษ และการตั้งค่าระบบยืนยันตัวตน
 class SettingsAuthView extends StatefulWidget {
   final VoidCallback? onLogout;
 
@@ -48,11 +49,16 @@ class _SettingsAuthViewState extends State<SettingsAuthView> {
     final newUrl = _urlCtrl.text.trim();
     if (newUrl.isNotEmpty) {
       final authVM = context.read<AuthViewModel>();
+      final localeVM = context.read<LocaleViewModel>();
       authVM.setBaseUrl(newUrl);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: Colors.blue.shade800,
-          content: Text('อัปเดต Base URL เรียบร้อย: $newUrl'),
+          content: Text(
+            localeVM.isThai
+                ? 'อัปเดต Base URL เรียบร้อย: $newUrl'
+                : 'Updated Base URL: $newUrl',
+          ),
         ),
       );
     }
@@ -64,12 +70,17 @@ class _SettingsAuthViewState extends State<SettingsAuthView> {
   }
 
   Future<void> _login() async {
+    final localeVM = context.read<LocaleViewModel>();
     final username = _usernameCtrl.text.trim();
     final password = _passwordCtrl.text.trim();
 
     if (username.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('กรุณากรอก Username และ Password')),
+        SnackBar(
+          content: Text(
+            localeVM.isThai ? 'กรุณากรอก Username และ Password' : 'Please enter Username and Password',
+          ),
+        ),
       );
       return;
     }
@@ -83,24 +94,33 @@ class _SettingsAuthViewState extends State<SettingsAuthView> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: Colors.green.shade700,
-          content: Text('เข้าสู่ระบบผ่าน OpenID Connect (OIDC) สำเร็จ! สวัสดีคุณ $username'),
+          content: Text(
+            localeVM.isThai
+                ? 'เข้าสู่ระบบผ่าน OpenID Connect (OIDC) สำเร็จ! สวัสดีคุณ $username'
+                : 'Signed in via OpenID Connect (OIDC) successfully! Welcome $username',
+          ),
         ),
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: Colors.red.shade700,
-          content: Text('เข้าสู่ระบบไม่สำเร็จ: ${authVM.errorMessage}'),
+          content: Text(
+            localeVM.isThai
+                ? 'เข้าสู่ระบบไม่สำเร็จ: ${authVM.errorMessage}'
+                : 'Login failed: ${authVM.errorMessage}',
+          ),
         ),
       );
     }
   }
 
   void _copyToClipboard(String text, String label) {
+    final localeVM = context.read<LocaleViewModel>();
     Clipboard.setData(ClipboardData(text: text));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('คัดลอก $label เรียบร้อยแล้ว'),
+        content: Text(localeVM.isThai ? 'คัดลอก $label เรียบร้อยแล้ว' : 'Copied $label to clipboard'),
         duration: const Duration(seconds: 2),
       ),
     );
@@ -111,6 +131,7 @@ class _SettingsAuthViewState extends State<SettingsAuthView> {
     final theme = Theme.of(context);
     final authVM = context.watch<AuthViewModel>();
     final bookingVM = context.watch<BookingViewModel>();
+    final localeVM = context.watch<LocaleViewModel>();
 
     final isLoggedIn = authVM.isAuthenticated;
     final claims = authVM.claims;
@@ -119,24 +140,40 @@ class _SettingsAuthViewState extends State<SettingsAuthView> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Column(
+        title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'ระบบยืนยันตัวตน & ตั้งค่า (OIDC & JWT)',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
+              localeVM.t('settings_title'),
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
             ),
             Text(
-              'Real OIDC Provider Architecture (Week 15)',
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.normal),
+              localeVM.t('settings_subtitle'),
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.normal),
             ),
           ],
         ),
         actions: [
+          // Language Switcher Chip in AppBar
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: ActionChip(
+              avatar: Text(localeVM.isThai ? '🇹🇭' : '🇬🇧', style: const TextStyle(fontSize: 14)),
+              label: Text(
+                localeVM.isThai ? 'TH' : 'EN',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+              ),
+              backgroundColor: theme.colorScheme.primaryContainer.withValues(alpha: 0.6),
+              side: BorderSide(color: theme.colorScheme.primary.withValues(alpha: 0.3)),
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              visualDensity: VisualDensity.compact,
+              onPressed: () => localeVM.toggleLocale(),
+            ),
+          ),
           if (widget.onLogout != null)
             IconButton(
               icon: const Icon(Icons.logout),
-              tooltip: 'ออกจากระบบ',
+              tooltip: localeVM.t('btn_logout'),
               onPressed: widget.onLogout,
             ),
         ],
@@ -146,6 +183,62 @@ class _SettingsAuthViewState extends State<SettingsAuthView> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // 0. Language Selector Dedicated Card
+            Card(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.language, color: theme.colorScheme.primary, size: 22),
+                        const SizedBox(width: 10),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              localeVM.t('language_switch'),
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                            ),
+                            Text(
+                              localeVM.isThai ? 'ปัจจุบัน: ภาษาไทย 🇹🇭' : 'Current: English 🇬🇧',
+                              style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    Row(
+                      children: [
+                        ChoiceChip(
+                          avatar: const Text('🇹🇭', style: TextStyle(fontSize: 14)),
+                          label: const Text('ไทย', style: TextStyle(fontSize: 12)),
+                          selected: localeVM.isThai,
+                          selectedColor: theme.colorScheme.primaryContainer,
+                          onSelected: (val) {
+                            if (val) localeVM.setLocale('th');
+                          },
+                        ),
+                        const SizedBox(width: 8),
+                        ChoiceChip(
+                          avatar: const Text('🇬🇧', style: TextStyle(fontSize: 14)),
+                          label: const Text('EN', style: TextStyle(fontSize: 12)),
+                          selected: localeVM.isEnglish,
+                          selectedColor: theme.colorScheme.primaryContainer,
+                          onSelected: (val) {
+                            if (val) localeVM.setLocale('en');
+                          },
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
             // Booking & Pickup Status Summary Card (แสดงสถิตินัดรับตรงกันทุกหน้า)
             Card(
               elevation: 1,
@@ -163,13 +256,13 @@ class _SettingsAuthViewState extends State<SettingsAuthView> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Row(
+                    Row(
                       children: [
-                        Icon(Icons.event_note, color: Colors.white, size: 20),
-                        SizedBox(width: 8),
+                        const Icon(Icons.event_note, color: Colors.white, size: 20),
+                        const SizedBox(width: 8),
                         Text(
-                          'ภาพรวมรายการจอง & วันนัดรับของคุณ',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white),
+                          localeVM.t('booking_overview_card'),
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white),
                         ),
                       ],
                     ),
@@ -183,7 +276,7 @@ class _SettingsAuthViewState extends State<SettingsAuthView> {
                               '${bookingVM.pendingCount}',
                               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.amberAccent),
                             ),
-                            const Text('รอนัดรับ', style: TextStyle(color: Colors.white70, fontSize: 11)),
+                            Text(localeVM.t('stat_pending'), style: const TextStyle(color: Colors.white70, fontSize: 11)),
                           ],
                         ),
                         Container(height: 28, width: 1, color: Colors.white24),
@@ -193,7 +286,7 @@ class _SettingsAuthViewState extends State<SettingsAuthView> {
                               '${bookingVM.pickedUpCount}',
                               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.lightGreenAccent),
                             ),
-                            const Text('รับแล้ว', style: TextStyle(color: Colors.white70, fontSize: 11)),
+                            Text(localeVM.t('stat_picked_up'), style: const TextStyle(color: Colors.white70, fontSize: 11)),
                           ],
                         ),
                         Container(height: 28, width: 1, color: Colors.white24),
@@ -203,7 +296,7 @@ class _SettingsAuthViewState extends State<SettingsAuthView> {
                               '${bookingVM.returnedCount}',
                               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
                             ),
-                            const Text('คืนเรียบร้อย', style: TextStyle(color: Colors.white70, fontSize: 11)),
+                            Text(localeVM.t('stat_returned'), style: const TextStyle(color: Colors.white70, fontSize: 11)),
                           ],
                         ),
                       ],
@@ -226,16 +319,16 @@ class _SettingsAuthViewState extends State<SettingsAuthView> {
                       children: [
                         Icon(Icons.dns_outlined, color: theme.colorScheme.primary, size: 20),
                         const SizedBox(width: 8),
-                        const Text(
-                          'Backend & OIDC Issuer Endpoint',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                        Text(
+                          localeVM.t('server_endpoint_card'),
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                         ),
                       ],
                     ),
                     const SizedBox(height: 6),
-                    const Text(
-                      'สลับ IP ให้ตรงกับอุปกรณ์ที่ใช้ทดสอบ:',
-                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    Text(
+                      localeVM.t('server_endpoint_sub'),
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
                     ),
                     const SizedBox(height: 6),
                     Wrap(
@@ -274,7 +367,7 @@ class _SettingsAuthViewState extends State<SettingsAuthView> {
                         const SizedBox(width: 8),
                         ElevatedButton(
                           onPressed: _saveBaseUrl,
-                          child: const Text('บันทึก'),
+                          child: Text(localeVM.t('btn_save')),
                         ),
                       ],
                     ),
@@ -312,7 +405,7 @@ class _SettingsAuthViewState extends State<SettingsAuthView> {
                               authVM.fetchDiscovery();
                             }
                           },
-                          child: Text(_showDiscovery ? 'ซ่อน' : 'แสดง'),
+                          child: Text(_showDiscovery ? localeVM.t('btn_hide') : localeVM.t('btn_show')),
                         ),
                       ],
                     ),
@@ -360,9 +453,9 @@ class _SettingsAuthViewState extends State<SettingsAuthView> {
                           children: [
                             Icon(Icons.verified_user, color: Colors.purple.shade700, size: 22),
                             const SizedBox(width: 8),
-                            const Text(
-                              'ล็อกอินผ่าน OIDC 1.0 Provider',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                            Text(
+                              localeVM.t('login_oidc_title'),
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                             ),
                           ],
                         ),
@@ -374,7 +467,7 @@ class _SettingsAuthViewState extends State<SettingsAuthView> {
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Text(
-                              'ออนไลน์: ${authVM.username}',
+                              '${localeVM.t('online_status')} ${authVM.username}',
                               style: TextStyle(fontSize: 11, color: Colors.green.shade900, fontWeight: FontWeight.bold),
                             ),
                           ),
@@ -383,9 +476,9 @@ class _SettingsAuthViewState extends State<SettingsAuthView> {
                     const SizedBox(height: 12),
 
                     // Quick test users selector
-                    const Text(
-                      'คลิกเลือกผู้ใช้งานทดสอบในระบบ:',
-                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey),
+                    Text(
+                      localeVM.t('test_users_title'),
+                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey),
                     ),
                     const SizedBox(height: 4),
                     Wrap(
@@ -447,14 +540,16 @@ class _SettingsAuthViewState extends State<SettingsAuthView> {
                                     child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                                   )
                                 : const Icon(Icons.login),
-                            label: Text(authVM.isLoading ? 'กำลังเข้าสู่ระบบ...' : 'เข้าสู่ระบบ (ขอรับ OIDC Tokens)'),
+                            label: Text(authVM.isLoading
+                                ? (localeVM.isThai ? 'กำลังเข้าสู่ระบบ...' : 'Signing in...')
+                                : localeVM.t('btn_login')),
                           ),
                         ),
                         if (isLoggedIn) ...[
                           const SizedBox(width: 8),
                           OutlinedButton(
                             onPressed: () => authVM.logout(),
-                            child: const Text('ออกจากระบบ'),
+                            child: Text(localeVM.t('btn_logout')),
                           ),
                         ],
                       ],
@@ -482,9 +577,9 @@ class _SettingsAuthViewState extends State<SettingsAuthView> {
                         children: [
                           Icon(Icons.badge, color: Colors.purple.shade800, size: 20),
                           const SizedBox(width: 8),
-                          const Text(
-                            'Decoded OIDC Claims (ข้อมูลผู้ใช้ที่ได้รับ)',
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                          Text(
+                            localeVM.t('decoded_claims_title'),
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                           ),
                         ],
                       ),
@@ -525,8 +620,10 @@ class _SettingsAuthViewState extends State<SettingsAuthView> {
                         children: [
                           const Icon(Icons.key, color: Colors.green, size: 20),
                           const SizedBox(width: 8),
-                          const Text('Active Tokens (บันทึกใน Secure Storage)',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                          Text(
+                            localeVM.t('active_tokens_title'),
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 12),
@@ -551,6 +648,7 @@ class _SettingsAuthViewState extends State<SettingsAuthView> {
   }
 
   Widget _buildTokenField(String label, String token) {
+    final localeVM = context.read<LocaleViewModel>();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -560,7 +658,7 @@ class _SettingsAuthViewState extends State<SettingsAuthView> {
             Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
             IconButton(
               icon: const Icon(Icons.copy, size: 16),
-              tooltip: 'คัดลอก $label',
+              tooltip: '${localeVM.isThai ? 'คัดลอก' : 'Copy'} $label',
               onPressed: () => _copyToClipboard(token, label),
             ),
           ],

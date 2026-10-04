@@ -14,6 +14,7 @@ import 'repositories/equipment_repository.dart';
 import 'viewmodels/auth_viewmodel.dart';
 import 'viewmodels/booking_viewmodel.dart';
 import 'viewmodels/equipment_viewmodel.dart';
+import 'viewmodels/locale_viewmodel.dart';
 
 // 4. Views
 import 'views/login_oidc_view.dart';
@@ -61,6 +62,13 @@ class RootAppWithProviders extends StatelessWidget {
         ),
 
         // --- 3. ViewModel Layer (State Management via ChangeNotifier) ---
+        ChangeNotifierProxyProvider<TokenStorageService, LocaleViewModel>(
+          create: (ctx) => LocaleViewModel(
+            tokenStorage: ctx.read<TokenStorageService>(),
+          ),
+          update: (_, tokenStorage, vm) => (vm ?? LocaleViewModel(tokenStorage: tokenStorage))
+            ..updateStorage(tokenStorage),
+        ),
         ChangeNotifierProxyProvider<AuthRepository, AuthViewModel>(
           create: (ctx) => AuthViewModel(
             authRepository: ctx.read<AuthRepository>(),
@@ -93,9 +101,12 @@ class ITBookingApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final localeVM = context.watch<LocaleViewModel>();
+
     return MaterialApp(
-      title: 'UBU IT Equipment Booking',
+      title: localeVM.t('app_title'),
       debugShowCheckedModeBanner: false,
+      locale: Locale(localeVM.currentLocale),
       theme: ThemeData(
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(

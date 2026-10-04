@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../viewmodels/auth_viewmodel.dart';
+import '../viewmodels/locale_viewmodel.dart';
 
 /// หน้าจอเข้าสู่ระบบผ่าน OpenID Connect (OIDC) ตามรูปแบบสถาปัตยกรรม MVVM
 /// ติดต่อกับ AuthViewModel ผ่าน Provider เท่านั้น ไม่ติดต่อ Service โดยตรง
@@ -285,12 +286,30 @@ class _LoginOidcViewState extends State<LoginOidcView> {
   @override
   Widget build(BuildContext context) {
     final authVM = context.watch<AuthViewModel>();
+    final localeVM = context.watch<LocaleViewModel>();
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 16),
+            child: ActionChip(
+              avatar: Text(localeVM.isThai ? '🇹🇭' : '🇬🇧', style: const TextStyle(fontSize: 14)),
+              label: Text(
+                localeVM.isThai ? 'TH' : 'EN',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+              ),
+              onPressed: () => localeVM.toggleLocale(),
+            ),
+          ),
+        ],
+      ),
       body: Center(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 480),
             child: Column(
@@ -321,20 +340,20 @@ class _LoginOidcViewState extends State<LoginOidcView> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                const Text(
-                  'ระบบจองอุปกรณ์ไอที',
+                Text(
+                  localeVM.t('app_title'),
                   textAlign: TextAlign.center,
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
                     color: Color(0xFF0F172A),
                   ),
                 ),
                 const SizedBox(height: 6),
-                const Text(
-                  'คณะวิศวกรรมศาสตร์ มหาวิทยาลัยอุบลราชธานี',
+                Text(
+                  localeVM.t('app_subtitle'),
                   textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+                  style: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
                 ),
                 const SizedBox(height: 28),
 

@@ -3,9 +3,11 @@ import 'package:provider/provider.dart';
 import '../models/equipment.dart';
 import '../viewmodels/auth_viewmodel.dart';
 import '../viewmodels/booking_viewmodel.dart';
+import '../viewmodels/locale_viewmodel.dart';
 
 /// ไดอะล็อกแบบฟอร์มการจองอุปกรณ์ไอทีตามสถาปัตยกรรม MVVM
 /// รับข้อมูลผู้ใช้จาก AuthViewModel และส่งข้อมูลการจองผ่าน BookingViewModel
+/// รองรับการแสดงผล 2 ภาษา (ไทย/อังกฤษ) ตามการตั้งค่าใน LocaleViewModel
 class BookingFormDialogView extends StatefulWidget {
   final Equipment equipment;
   final VoidCallback onBookingSuccess;
@@ -126,6 +128,7 @@ class _BookingFormDialogViewState extends State<BookingFormDialogView> {
   Future<void> _submitBooking() async {
     if (!_formKey.currentState!.validate()) return;
 
+    final localeVM = context.read<LocaleViewModel>();
     setState(() => _isLoading = true);
 
     final payload = {
@@ -158,7 +161,9 @@ class _BookingFormDialogViewState extends State<BookingFormDialogView> {
         SnackBar(
           backgroundColor: Colors.green.shade700,
           content: Text(
-            'จองอุปกรณ์สำเร็จ! นัดรับวันที่ ${_formatDate(_pickupDate)} เวลา ${_pickupTime.format(context)}',
+            localeVM.isThai
+                ? 'จองอุปกรณ์สำเร็จ! นัดรับวันที่ ${_formatDate(_pickupDate)} เวลา ${_pickupTime.format(context)}'
+                : 'Booking reserved! Scheduled pickup: ${_formatDate(_pickupDate)} at ${_pickupTime.format(context)}',
           ),
         ),
       );
@@ -166,7 +171,10 @@ class _BookingFormDialogViewState extends State<BookingFormDialogView> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: Colors.red.shade700,
-          content: Text(bookingVM.errorMessage ?? 'เกิดข้อผิดพลาดในการจอง'),
+          content: Text(
+            bookingVM.errorMessage ??
+                (localeVM.isThai ? 'เกิดข้อผิดพลาดในการจอง' : 'Failed to create booking'),
+          ),
         ),
       );
     }
@@ -175,6 +183,7 @@ class _BookingFormDialogViewState extends State<BookingFormDialogView> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final localeVM = context.watch<LocaleViewModel>();
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -206,9 +215,9 @@ class _BookingFormDialogViewState extends State<BookingFormDialogView> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'แบบฟอร์มจองอุปกรณ์ไอที',
-                          style: TextStyle(
+                        Text(
+                          localeVM.t('dialog_booking_title'),
+                          style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
                           ),
@@ -255,7 +264,7 @@ class _BookingFormDialogViewState extends State<BookingFormDialogView> {
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
-                                  'จุดรับอุปกรณ์: ${widget.equipment.pickupLocation}',
+                                  '${localeVM.t('pickup_location_label')} ${widget.equipment.pickupLocation}',
                                   style: TextStyle(fontSize: 13, color: Colors.blue.shade900),
                                 ),
                               ),
@@ -266,7 +275,7 @@ class _BookingFormDialogViewState extends State<BookingFormDialogView> {
 
                         // Section 1: Pickup Schedule
                         Text(
-                          'วันและเวลาที่นัดหมายเข้ารับอุปกรณ์',
+                          localeVM.t('dialog_pickup_section'),
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             color: theme.colorScheme.primary,
@@ -281,7 +290,7 @@ class _BookingFormDialogViewState extends State<BookingFormDialogView> {
                               child: OutlinedButton.icon(
                                 icon: const Icon(Icons.calendar_today, size: 18),
                                 label: Text(
-                                  'วันที่รับ: ${_formatDate(_pickupDate)}',
+                                  '${localeVM.t('dialog_pickup_date')} ${_formatDate(_pickupDate)}',
                                   style: const TextStyle(fontSize: 13),
                                 ),
                                 style: OutlinedButton.styleFrom(
@@ -315,7 +324,7 @@ class _BookingFormDialogViewState extends State<BookingFormDialogView> {
                         OutlinedButton.icon(
                           icon: const Icon(Icons.event_repeat, size: 18),
                           label: Text(
-                            'กำหนดคืนอุปกรณ์: ${_formatDate(_returnDate)}',
+                            '${localeVM.t('dialog_return_date')} ${_formatDate(_returnDate)}',
                             style: const TextStyle(fontSize: 13),
                           ),
                           style: OutlinedButton.styleFrom(
@@ -329,7 +338,7 @@ class _BookingFormDialogViewState extends State<BookingFormDialogView> {
 
                         // Section 2: Borrower Information
                         Text(
-                          'ข้อมูลผู้ขอยืม',
+                          localeVM.t('dialog_borrower_section'),
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             color: theme.colorScheme.primary,
@@ -340,12 +349,14 @@ class _BookingFormDialogViewState extends State<BookingFormDialogView> {
                         TextFormField(
                           controller: _nameCtrl,
                           decoration: InputDecoration(
-                            labelText: 'ชื่อ - นามสกุล *',
+                            labelText: localeVM.t('dialog_fullname'),
                             prefixIcon: const Icon(Icons.person_outline),
                             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                             contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                           ),
-                          validator: (v) => (v == null || v.trim().isEmpty) ? 'กรุณากรอกชื่อ-นามสกุล' : null,
+                          validator: (v) => (v == null || v.trim().isEmpty)
+                              ? (localeVM.isThai ? 'กรุณากรอกชื่อ-นามสกุล' : 'Please enter full name')
+                              : null,
                         ),
                         const SizedBox(height: 10),
                         Row(
@@ -355,12 +366,14 @@ class _BookingFormDialogViewState extends State<BookingFormDialogView> {
                                 controller: _phoneCtrl,
                                 keyboardType: TextInputType.phone,
                                 decoration: InputDecoration(
-                                  labelText: 'เบอร์โทรศัพท์ *',
+                                  labelText: localeVM.t('dialog_phone'),
                                   prefixIcon: const Icon(Icons.phone_outlined),
                                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                                   contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                                 ),
-                                validator: (v) => (v == null || v.trim().isEmpty) ? 'กรุณากรอกเบอร์โทร' : null,
+                                validator: (v) => (v == null || v.trim().isEmpty)
+                                    ? (localeVM.isThai ? 'กรุณากรอกเบอร์โทร' : 'Please enter phone number')
+                                    : null,
                               ),
                             ),
                             const SizedBox(width: 8),
@@ -368,7 +381,7 @@ class _BookingFormDialogViewState extends State<BookingFormDialogView> {
                               child: TextFormField(
                                 controller: _studentIdCtrl,
                                 decoration: InputDecoration(
-                                  labelText: 'รหัสนักศึกษา/บุคลากร',
+                                  labelText: localeVM.t('dialog_student_id'),
                                   prefixIcon: const Icon(Icons.badge_outlined),
                                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                                   contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -382,13 +395,17 @@ class _BookingFormDialogViewState extends State<BookingFormDialogView> {
                           controller: _purposeCtrl,
                           maxLines: 2,
                           decoration: InputDecoration(
-                            labelText: 'วัตถุประสงค์การยืมใช้งาน *',
-                            hintText: 'เช่น นำเสนอโครงงาน Mobile Dev, จัดสัมมนา',
+                            labelText: localeVM.t('dialog_purpose'),
+                            hintText: localeVM.isThai
+                                ? 'เช่น นำเสนอโครงงาน Mobile Dev, จัดสัมมนา'
+                                : 'e.g. Mobile Dev project presentation, seminar',
                             prefixIcon: const Icon(Icons.assignment_outlined),
                             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                             contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                           ),
-                          validator: (v) => (v == null || v.trim().isEmpty) ? 'กรุณาระบุวัตถุประสงค์' : null,
+                          validator: (v) => (v == null || v.trim().isEmpty)
+                              ? (localeVM.isThai ? 'กรุณาระบุวัตถุประสงค์' : 'Please enter borrowing purpose')
+                              : null,
                         ),
                         const SizedBox(height: 12),
 
@@ -397,7 +414,7 @@ class _BookingFormDialogViewState extends State<BookingFormDialogView> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
-                              'จำนวนที่ต้องการยืม (สูงสุด ${widget.equipment.availableQuantity} เครื่อง):',
+                              localeVM.t('dialog_quantity_label', {'max': '${widget.equipment.availableQuantity}'}),
                               style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
                             ),
                             Container(
@@ -443,7 +460,7 @@ class _BookingFormDialogViewState extends State<BookingFormDialogView> {
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
                       onPressed: () => Navigator.of(context).pop(),
-                      child: const Text('ยกเลิก'),
+                      child: Text(localeVM.t('btn_cancel')),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -464,7 +481,11 @@ class _BookingFormDialogViewState extends State<BookingFormDialogView> {
                               child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                             )
                           : const Icon(Icons.check_circle_outline),
-                      label: Text(_isLoading ? 'กำลังบันทึก...' : 'ยืนยันนัดหมายจอง'),
+                      label: Text(
+                        _isLoading
+                            ? (localeVM.isThai ? 'กำลังบันทึก...' : 'Submitting...')
+                            : localeVM.t('btn_confirm_booking'),
+                      ),
                     ),
                   ),
                 ],

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../viewmodels/auth_viewmodel.dart';
 import '../viewmodels/booking_viewmodel.dart';
+import '../viewmodels/locale_viewmodel.dart';
 import 'equipment_catalog_view.dart';
 import 'my_bookings_view.dart';
 import 'settings_auth_view.dart';
@@ -25,27 +26,28 @@ class _MainNavigationViewState extends State<MainNavigationView> {
   }
 
   Future<void> _confirmLogout() async {
+    final localeVM = context.read<LocaleViewModel>();
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.logout, color: Colors.red),
-            SizedBox(width: 8),
-            Text('ยืนยันออกจากระบบ', style: TextStyle(fontWeight: FontWeight.bold)),
+            const Icon(Icons.logout, color: Colors.red),
+            const SizedBox(width: 8),
+            Text(localeVM.t('confirm_logout_title'), style: const TextStyle(fontWeight: FontWeight.bold)),
           ],
         ),
-        content: const Text('คุณต้องการออกจากระบบและล้าง Token จาก Secure Storage ใช่หรือไม่?'),
+        content: Text(localeVM.t('confirm_logout_msg')),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('ยกเลิก'),
+            child: Text(localeVM.t('btn_cancel')),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('ออกจากระบบ'),
+            child: Text(localeVM.t('btn_logout')),
           ),
         ],
       ),
@@ -55,7 +57,11 @@ class _MainNavigationViewState extends State<MainNavigationView> {
       await context.read<AuthViewModel>().logout();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('ออกจากระบบและล้าง Secure Storage เรียบร้อยแล้ว')),
+          SnackBar(
+            content: Text(localeVM.isThai
+                ? 'ออกจากระบบและล้าง Secure Storage เรียบร้อยแล้ว'
+                : 'Logged out and cleared Secure Storage successfully'),
+          ),
         );
       }
     }
@@ -64,6 +70,7 @@ class _MainNavigationViewState extends State<MainNavigationView> {
   @override
   Widget build(BuildContext context) {
     final bookingVM = context.watch<BookingViewModel>();
+    final localeVM = context.watch<LocaleViewModel>();
     final pendingCount = bookingVM.pendingCount;
 
     final List<Widget> screens = [
@@ -88,10 +95,10 @@ class _MainNavigationViewState extends State<MainNavigationView> {
         selectedIndex: _currentIndex,
         onDestinationSelected: _navigateToTab,
         destinations: [
-          const NavigationDestination(
-            icon: Icon(Icons.devices_outlined),
-            selectedIcon: Icon(Icons.devices),
-            label: 'อุปกรณ์ไอที',
+          NavigationDestination(
+            icon: const Icon(Icons.devices_outlined),
+            selectedIcon: const Icon(Icons.devices),
+            label: localeVM.t('nav_equipment'),
           ),
           NavigationDestination(
             icon: Badge.count(
@@ -106,12 +113,12 @@ class _MainNavigationViewState extends State<MainNavigationView> {
               backgroundColor: Colors.amber.shade900,
               child: const Icon(Icons.event_note),
             ),
-            label: 'กำหนดการรับ',
+            label: localeVM.t('nav_schedule'),
           ),
-          const NavigationDestination(
-            icon: Icon(Icons.security_outlined),
-            selectedIcon: Icon(Icons.security),
-            label: 'ข้อมูล OIDC',
+          NavigationDestination(
+            icon: const Icon(Icons.security_outlined),
+            selectedIcon: const Icon(Icons.security),
+            label: localeVM.t('nav_oidc'),
           ),
         ],
       ),
