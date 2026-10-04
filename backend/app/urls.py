@@ -4,9 +4,11 @@ from .views import (
     EquipmentDetailView,
     BookingListView,
     BookingDetailView,
+    OIDCLoginView,
 )
 
 urlpatterns = [
+    path('oidc/login/', OIDCLoginView.as_view(), name='oidc-login'),
     path('equipments/', EquipmentListView.as_view(), name='equipment-list'),
     path('equipments/<int:pk>/', EquipmentDetailView.as_view(), name='equipment-detail'),
     path('bookings/', BookingListView.as_view(), name='booking-list'),

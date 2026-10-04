@@ -21,8 +21,14 @@ from rest_framework_simplejwt.views import (
                 TokenRefreshView,
             )
 
+from oidc_provider.views import ProviderInfoView
+from app.views import OIDCCallbackView
+
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('callback/', OIDCCallbackView.as_view(), name='oidc-callback'),
+    path('.well-known/openid-configuration', ProviderInfoView.as_view(), name='oidc_provider_info_root'),
+    path('openid/', include('oidc_provider.urls', namespace='oidc_provider')),
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('api/', include('app.urls')),

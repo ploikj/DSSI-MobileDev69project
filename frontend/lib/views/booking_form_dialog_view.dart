@@ -1,22 +1,26 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/equipment.dart';
-import '../services/api_service.dart';
+import '../viewmodels/auth_viewmodel.dart';
+import '../viewmodels/booking_viewmodel.dart';
 
-class BookingFormDialog extends StatefulWidget {
+/// ไดอะล็อกแบบฟอร์มการจองอุปกรณ์ไอทีตามสถาปัตยกรรม MVVM
+/// รับข้อมูลผู้ใช้จาก AuthViewModel และส่งข้อมูลการจองผ่าน BookingViewModel
+class BookingFormDialogView extends StatefulWidget {
   final Equipment equipment;
   final VoidCallback onBookingSuccess;
 
-  const BookingFormDialog({
+  const BookingFormDialogView({
     super.key,
     required this.equipment,
     required this.onBookingSuccess,
   });
 
   @override
-  State<BookingFormDialog> createState() => _BookingFormDialogState();
+  State<BookingFormDialogView> createState() => _BookingFormDialogViewState();
 }
 
-class _BookingFormDialogState extends State<BookingFormDialog> {
+class _BookingFormDialogViewState extends State<BookingFormDialogView> {
   final _formKey = GlobalKey<FormState>();
   final _nameCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
@@ -39,11 +43,22 @@ class _BookingFormDialogState extends State<BookingFormDialog> {
     _pickupTime = const TimeOfDay(hour: 9, minute: 30);
     _returnDate = now.add(const Duration(days: 3));
 
-    // autofill if logged in
-    final username = ApiService().currentUsername;
-    if (username != null && username.isNotEmpty) {
-      _nameCtrl.text = username;
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // ดึง Claims จาก AuthViewModel เพื่อเติมข้อมูลอัตโนมัติ
+      final authVM = context.read<AuthViewModel>();
+      final claims = authVM.claims;
+      if (claims != null && claims.isNotEmpty) {
+        _nameCtrl.text = claims['name'] ?? claims['preferred_username'] ?? '';
+        _emailCtrl.text = claims['email'] ?? '';
+        if (claims['student_id'] != null) {
+          _studentIdCtrl.text = claims['student_id'].toString();
+        } else if (claims['sub'] != null) {
+          _studentIdCtrl.text = '6600000${claims['sub']}';
+        }
+      } else if (authVM.username != null && authVM.username!.isNotEmpty) {
+        _nameCtrl.text = authVM.username!;
+      }
+    });
   }
 
   @override
@@ -113,25 +128,29 @@ class _BookingFormDialogState extends State<BookingFormDialog> {
 
     setState(() => _isLoading = true);
 
-    try {
-      final payload = {
-        'equipment_id': widget.equipment.id,
-        'borrower_name': _nameCtrl.text.trim(),
-        'borrower_phone': _phoneCtrl.text.trim(),
-        'borrower_student_id': _studentIdCtrl.text.trim(),
-        'borrower_email': _emailCtrl.text.trim(),
-        'quantity': _quantity,
-        'pickup_date': _formatDate(_pickupDate),
-        'pickup_time': _formatTime(_pickupTime),
-        'return_date': _formatDate(_returnDate),
-        'purpose': _purposeCtrl.text.trim(),
-        'note': _noteCtrl.text.trim(),
-        'status': 'PENDING',
-      };
+    final payload = {
+      'equipment_id': widget.equipment.id,
+      'borrower_name': _nameCtrl.text.trim(),
+      'borrower_phone': _phoneCtrl.text.trim(),
+      'borrower_student_id': _studentIdCtrl.text.trim(),
+      'borrower_email': _emailCtrl.text.trim(),
+      'quantity': _quantity,
+      'pickup_date': _formatDate(_pickupDate),
+      'pickup_time': _formatTime(_pickupTime),
+      'return_date': _formatDate(_returnDate),
+      'purpose': _purposeCtrl.text.trim(),
+      'note': _noteCtrl.text.trim(),
+      'status': 'PENDING',
+    };
 
-      await ApiService().createBooking(payload);
+    // ส่งผ่าน BookingViewModel ตามหลัก MVVM
+    final bookingVM = context.read<BookingViewModel>();
+    final success = await bookingVM.createBooking(payload);
 
-      if (!mounted) return;
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+
+    if (success) {
       Navigator.of(context).pop();
       widget.onBookingSuccess();
 
@@ -143,18 +162,13 @@ class _BookingFormDialogState extends State<BookingFormDialog> {
           ),
         ),
       );
-    } catch (e) {
-      if (!mounted) return;
+    } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: Colors.red.shade700,
-          content: Text('เกิดข้อผิดพลาดในการจอง: $e'),
+          content: Text(bookingVM.errorMessage ?? 'เกิดข้อผิดพลาดในการจอง'),
         ),
       );
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
     }
   }
 
@@ -250,7 +264,7 @@ class _BookingFormDialogState extends State<BookingFormDialog> {
                         ),
                         const SizedBox(height: 16),
 
-                        // Section 1: Pickup Schedule (จุดสำคัญที่ผู้ใช้ต้องการ)
+                        // Section 1: Pickup Schedule
                         Text(
                           'วันและเวลาที่นัดหมายเข้ารับอุปกรณ์',
                           style: TextStyle(

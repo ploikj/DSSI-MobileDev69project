@@ -1,26 +1,26 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/booking.dart';
-import '../services/api_service.dart';
+import '../viewmodels/booking_viewmodel.dart';
 
-class MyBookingsScreen extends StatefulWidget {
-  const MyBookingsScreen({super.key});
+/// หน้าจอกำหนดการรับอุปกรณ์ไอทีและรายการจองตามสถาปัตยกรรม MVVM
+/// ติดต่อกับ BookingViewModel ผ่าน Provider เท่านั้น ไม่ติดต่อ Service โดยตรง
+class MyBookingsView extends StatefulWidget {
+  final VoidCallback? onLogout;
+
+  const MyBookingsView({
+    super.key,
+    this.onLogout,
+  });
 
   @override
-  State<MyBookingsScreen> createState() => _MyBookingsScreenState();
+  State<MyBookingsView> createState() => _MyBookingsViewState();
 }
 
-class _MyBookingsScreenState extends State<MyBookingsScreen> {
-  final ApiService _apiService = ApiService();
-
-  List<Booking> _bookings = [];
-  bool _isLoading = true;
-  String? _errorMessage;
-  String _selectedStatus = 'ALL';
-
-  final List<Map<String, String>> _statusFilters = [
+class _MyBookingsViewState extends State<MyBookingsView> {
+  final List<Map<String, String>> _statusFilters = const [
     {'key': 'ALL', 'label': 'ทั้งหมด'},
     {'key': 'PENDING', 'label': 'รอนัดรับ'},
-    {'key': 'APPROVED', 'label': 'พร้อมรับ'},
     {'key': 'PICKED_UP', 'label': 'รับอุปกรณ์แล้ว'},
     {'key': 'RETURNED', 'label': 'คืนแล้ว'},
   ];
@@ -28,31 +28,9 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
   @override
   void initState() {
     super.initState();
-    _loadBookings();
-  }
-
-  Future<void> _loadBookings() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<BookingViewModel>().loadBookings();
     });
-
-    try {
-      final list = await _apiService.fetchBookings(status: _selectedStatus);
-      if (mounted) {
-        setState(() {
-          _bookings = list;
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _errorMessage = e.toString();
-          _isLoading = false;
-        });
-      }
-    }
   }
 
   Future<void> _updateStatus(int bookingId, String newStatus, String actionName) async {
@@ -74,25 +52,24 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
       ),
     );
 
-    if (confirm != true) return;
+    if (confirm != true || !mounted) return;
 
-    try {
-      await _apiService.updateBookingStatus(bookingId, newStatus);
-      if (mounted) {
+    final bookingVM = context.read<BookingViewModel>();
+    final success = await bookingVM.updateStatus(bookingId, newStatus);
+
+    if (mounted) {
+      if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: Colors.green.shade700,
             content: Text('$actionName สำเร็จแล้ว!'),
           ),
         );
-        _loadBookings();
-      }
-    } catch (e) {
-      if (mounted) {
+      } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: Colors.red.shade700,
-            content: Text('เกิดข้อผิดพลาด: $e'),
+            content: Text('เกิดข้อผิดพลาด: ${bookingVM.errorMessage}'),
           ),
         );
       }
@@ -102,10 +79,12 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final bookingVM = context.watch<BookingViewModel>();
 
-    final pendingCount = _bookings.where((b) => b.status == 'PENDING' || b.status == 'APPROVED').length;
-    final pickedUpCount = _bookings.where((b) => b.status == 'PICKED_UP').length;
-    final returnedCount = _bookings.where((b) => b.status == 'RETURNED').length;
+    final pendingCount = bookingVM.pendingCount;
+    final pickedUpCount = bookingVM.pickedUpCount;
+    final returnedCount = bookingVM.returnedCount;
+    final totalCount = bookingVM.totalCount;
 
     return Scaffold(
       appBar: AppBar(
@@ -126,13 +105,19 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: 'รีเฟรชข้อมูล',
-            onPressed: _loadBookings,
+            onPressed: () => bookingVM.loadBookings(),
           ),
+          if (widget.onLogout != null)
+            IconButton(
+              icon: const Icon(Icons.logout),
+              tooltip: 'ออกจากระบบ',
+              onPressed: widget.onLogout,
+            ),
         ],
       ),
       body: Column(
         children: [
-          // Summary Counters Banner
+          // Summary Counters Banner (คำนวณจากยอดรวม ไม่ลดเป็น 0 เมื่อกดสลับแท็บ)
           Container(
             margin: const EdgeInsets.fromLTRB(16, 12, 16, 8),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -173,9 +158,23 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
               separatorBuilder: (_, _) => const SizedBox(width: 8),
               itemBuilder: (context, index) {
                 final item = _statusFilters[index];
-                final isSelected = _selectedStatus == item['key'];
+                final isSelected = bookingVM.selectedStatus == item['key'];
+                int count;
+                switch (item['key']) {
+                  case 'PENDING':
+                    count = pendingCount;
+                    break;
+                  case 'PICKED_UP':
+                    count = pickedUpCount;
+                    break;
+                  case 'RETURNED':
+                    count = returnedCount;
+                    break;
+                  default:
+                    count = totalCount;
+                }
                 return ChoiceChip(
-                  label: Text(item['label']!),
+                  label: Text('${item['label']} ($count)'),
                   selected: isSelected,
                   selectedColor: theme.colorScheme.primaryContainer,
                   labelStyle: TextStyle(
@@ -185,8 +184,7 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
                   ),
                   onSelected: (selected) {
                     if (selected) {
-                      setState(() => _selectedStatus = item['key']!);
-                      _loadBookings();
+                      bookingVM.setStatusFilter(item['key']!);
                     }
                   },
                 );
@@ -198,8 +196,8 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
           // Content List
           Expanded(
             child: RefreshIndicator(
-              onRefresh: _loadBookings,
-              child: _buildBookingsContent(theme),
+              onRefresh: () => bookingVM.loadBookings(),
+              child: _buildBookingsContent(theme, bookingVM),
             ),
           ),
         ],
@@ -230,12 +228,12 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
     );
   }
 
-  Widget _buildBookingsContent(ThemeData theme) {
-    if (_isLoading) {
+  Widget _buildBookingsContent(ThemeData theme, BookingViewModel bookingVM) {
+    if (bookingVM.isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
 
-    if (_errorMessage != null) {
+    if (bookingVM.errorMessage != null) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -246,10 +244,10 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
               const SizedBox(height: 12),
               Text('โหลดข้อมูลการจองไม่สำเร็จ', style: theme.textTheme.titleMedium),
               const SizedBox(height: 6),
-              Text(_errorMessage!, textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+              Text(bookingVM.errorMessage!, textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: Colors.grey)),
               const SizedBox(height: 16),
               ElevatedButton.icon(
-                onPressed: _loadBookings,
+                onPressed: () => bookingVM.loadBookings(),
                 icon: const Icon(Icons.refresh),
                 label: const Text('ลองใหม่'),
               ),
@@ -259,7 +257,9 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
       );
     }
 
-    if (_bookings.isEmpty) {
+    final displayedList = bookingVM.displayedBookings;
+
+    if (displayedList.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -282,15 +282,14 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
 
     return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      itemCount: _bookings.length,
-      itemBuilder: (context, index) => _buildBookingCard(_bookings[index], theme),
+      itemCount: displayedList.length,
+      itemBuilder: (context, index) => _buildBookingCard(displayedList[index], theme),
     );
   }
 
   Widget _buildBookingCard(Booking item, ThemeData theme) {
     final eq = item.equipmentDetail;
     final isPending = item.status == 'PENDING';
-    final isApproved = item.status == 'APPROVED';
     final isPickedUp = item.status == 'PICKED_UP';
     final isReturned = item.status == 'RETURNED';
 
@@ -300,14 +299,10 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
 
     switch (item.status) {
       case 'PENDING':
+      case 'APPROVED':
         statusColor = Colors.orange.shade800;
         statusBgColor = Colors.orange.shade50;
         statusIcon = Icons.hourglass_top_rounded;
-        break;
-      case 'APPROVED':
-        statusColor = Colors.blue.shade800;
-        statusBgColor = Colors.blue.shade50;
-        statusIcon = Icons.check_circle_outline;
         break;
       case 'PICKED_UP':
         statusColor = Colors.green.shade800;
@@ -394,7 +389,7 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
               ),
             const SizedBox(height: 12),
 
-            // Pickup & Return Schedule Highlight Box (หัวใจสำคัญของการนัดหมายวัน-เวลา)
+            // Pickup & Return Schedule Highlight Box
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -434,7 +429,7 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'สถานที่รับ: ${eq?.pickupLocation ?? 'ห้องบริการไอที'}',
+                          'สถานที่รับ: ${eq?.pickupLocation ?? 'ห้องบริการไอที อาคาร EN2'}',
                           style: TextStyle(fontSize: 12, color: Colors.blue.shade900),
                         ),
                       ),
@@ -459,111 +454,97 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
             const SizedBox(height: 12),
 
             // Borrower details
-            Row(
-              children: [
-                Expanded(
-                  child: Row(
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.grey.shade200),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
                     children: [
-                      const Icon(Icons.person, size: 16, color: Colors.grey),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          'ผู้ยืม: ${item.borrowerName}',
-                          style: const TextStyle(fontSize: 13),
-                          overflow: TextOverflow.ellipsis,
+                      const Icon(Icons.person, size: 16, color: Colors.blueGrey),
+                      const SizedBox(width: 6),
+                      Text('ผู้ยืม: ${item.borrowerName} (${item.borrowerStudentId.isNotEmpty ? item.borrowerStudentId : 'บุคคลทั่วไป'})',
+                          style: const TextStyle(fontSize: 12)),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      const Icon(Icons.phone, size: 16, color: Colors.blueGrey),
+                      const SizedBox(width: 6),
+                      Text('เบอร์โทร: ${item.borrowerPhone}', style: const TextStyle(fontSize: 12)),
+                      const Spacer(),
+                      const Icon(Icons.layers, size: 16, color: Colors.blueGrey),
+                      const SizedBox(width: 6),
+                      Text('จำนวน: ${item.quantity} เครื่อง', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                  if (item.purpose.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.info_outline, size: 16, color: Colors.blueGrey),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            'วัตถุประสงค์: ${item.purpose}',
+                            style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: Row(
-                    children: [
-                      const Icon(Icons.phone, size: 16, color: Colors.grey),
-                      const SizedBox(width: 4),
-                      Text(item.borrowerPhone, style: const TextStyle(fontSize: 13)),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Row(
-              children: [
-                const Icon(Icons.lightbulb_outline, size: 16, color: Colors.grey),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Text(
-                    'วัตถุประสงค์: ${item.purpose}',
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-
-            // Action Buttons for Pick-up / Return
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                if (isPending || isApproved) ...[
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green.shade700,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      ],
                     ),
-                    icon: const Icon(Icons.check, size: 16),
-                    label: const Text('ยืนยันการรับอุปกรณ์ (Pick-Up)', style: TextStyle(fontSize: 12)),
-                    onPressed: () => _updateStatus(item.id, 'PICKED_UP', 'รับอุปกรณ์'),
-                  ),
+                  ],
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            // Action Buttons
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                if (isPending) ...[
                   OutlinedButton.icon(
                     style: OutlinedButton.styleFrom(
                       foregroundColor: Colors.red.shade700,
                       side: BorderSide(color: Colors.red.shade300),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                     ),
-                    icon: const Icon(Icons.cancel_outlined, size: 16),
-                    label: const Text('ยกเลิกการจอง', style: TextStyle(fontSize: 12)),
                     onPressed: () => _updateStatus(item.id, 'CANCELLED', 'ยกเลิกการจอง'),
+                    icon: const Icon(Icons.cancel_outlined, size: 16),
+                    label: const Text('ยกเลิกการจอง'),
                   ),
-                ],
-                if (isPickedUp) ...[
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green.shade700,
+                      foregroundColor: Colors.white,
+                    ),
+                    onPressed: () => _updateStatus(item.id, 'PICKED_UP', 'รับอุปกรณ์แล้ว'),
+                    icon: const Icon(Icons.check, size: 16),
+                    label: const Text('รับอุปกรณ์แล้ว'),
+                  ),
+                ] else if (isPickedUp) ...[
                   ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.teal.shade700,
                       foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                     ),
-                    icon: const Icon(Icons.assignment_return_outlined, size: 16),
-                    label: const Text('บันทึกการส่งคืนอุปกรณ์', style: TextStyle(fontSize: 12)),
-                    onPressed: () => _updateStatus(item.id, 'RETURNED', 'คืนอุปกรณ์'),
+                    onPressed: () => _updateStatus(item.id, 'RETURNED', 'คืนอุปกรณ์เรียบร้อยแล้ว'),
+                    icon: const Icon(Icons.assignment_return, size: 16),
+                    label: const Text('คืนอุปกรณ์แล้ว'),
                   ),
-                ],
-                if (isReturned) ...[
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.done_all, size: 16, color: Colors.teal.shade700),
-                        const SizedBox(width: 6),
-                        const Text(
-                          'ดำเนินการเสร็จสมบูรณ์แล้ว',
-                          style: TextStyle(fontSize: 12, color: Colors.black54),
-                        ),
-                      ],
-                    ),
+                ] else if (isReturned) ...[
+                  Chip(
+                    avatar: const Icon(Icons.check_circle, color: Colors.teal, size: 16),
+                    label: const Text('ดำเนินการเสร็จสิ้นเรียบร้อยแล้ว', style: TextStyle(fontSize: 11, color: Colors.teal)),
+                    backgroundColor: Colors.teal.shade50,
                   ),
                 ],
               ],

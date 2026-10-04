@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework_simplejwt',
     'corsheaders',
+    'oidc_provider',
     'app',
 ]
 
@@ -131,4 +132,18 @@ MAILERS = {
     'default': {
         'BACKEND': 'django.core.mail.backends.console.EmailBackend',
     },
+}
+
+# OIDC Provider Configuration
+SITE_URL = 'http://127.0.0.1:8000'
+LOGIN_URL = '/admin/login/'
+OIDC_USERINFO = 'app.oidc_claims.userinfo'
+OIDC_EXTRA_SCOPE_CLAIMS = 'app.oidc_claims.CustomScopeClaims'
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'app.authentication.OIDCAuthentication',
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
+    ],
 }
